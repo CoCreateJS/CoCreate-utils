@@ -86,17 +86,15 @@ export function queryElements({ element = document, prefix, selector }) {
 		let elements = new Set();
 
 		if (!selector && element.nodeType === 1) {
-			if (!prefix) {
-				for (let attr of element.attributes) {
-					if (attr.name.endsWith("-query") || attr.name.endsWith(".query")) {
-						prefix = attr.name.slice(0, -6);
-					}
+			if (prefix && !element.hasAttribute(prefix)) return [];
+			let queryName = prefix ? `${prefix}-query` : null;
+
+			for (let attr of element.attributes) {
+				if (queryName && attr.name === queryName) {
+					selector = attr.value;
+					break;
 				}
-				if (!prefix) return [];
 			}
-			selector =
-				element.getAttribute(prefix + "-" + "query") ||
-				element.getAttribute(prefix + "." + "query");
 			if (!selector) return [];
 		}
 
