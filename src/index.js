@@ -16,7 +16,7 @@ export { queryElements, checkMediaQueries } from "./queryElements.js";
 export { queryData, searchData, sortData } from "./dataQuery.js";
 export { getAttributes, getAttributeNames, setAttributeNames } from "./attributes.js";
 export { clickedElement } from "./clickedElement.js";
-export { processOperators, processOperatorsAsync } from "./operators.js";
+export { processOperators, processOperatorsAsync, customOperators, safeParse } from "./operators.js";
 
 import { getRelativePath } from "./getRelativePath.js";
 import { ObjectId } from "./ObjectId.js";
@@ -36,7 +36,7 @@ import { queryElements, checkMediaQueries } from "./queryElements.js";
 import { queryData, searchData, sortData } from "./dataQuery.js";
 import { getAttributes, getAttributeNames, setAttributeNames } from "./attributes.js";
 import { clickedElement } from "./clickedElement.js";
-import { processOperators, processOperatorsAsync } from "./operators.js";
+import { processOperators, processOperatorsAsync, customOperators, safeParse } from "./operators.js";
 
 const utils = {
 	getRelativePath,
@@ -63,7 +63,10 @@ const utils = {
 	getAttributeNames,
 	clickedElement,
 	processOperators,
-	processOperatorsAsync
+	processOperatorsAsync,
+	customOperators,
+	safeParse
+
 };
 
 export default utils;

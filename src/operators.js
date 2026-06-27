@@ -819,4 +819,4 @@ function getSubdomain() {
     return null;
 }
 
-export { processOperators, processOperatorsAsync, customOperators };
+export { processOperators, processOperatorsAsync, customOperators, safeParse };

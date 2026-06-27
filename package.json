@@ -23,8 +23,7 @@
     "build:modules": "npm run build:modules:esm && npm run build:modules:cjs",
     "build": "npm run build:umd && npm run build:modules",
     "dev": "npx webpack --config webpack.config.js --watch",
-    "prepare": "npm run build:modules",
-    "postinstall": "node -e \"const { execSync } = require('child_process'); try { execSync('coc --version', { stdio: 'ignore' }); } catch (error) { try { execSync('npm install -g @cocreate/cli', { stdio: 'inherit' }); console.log('Installed \"@cocreate/cli\" globally.'); } catch (error) { console.error('Failed to install \"@cocreate/cli\" globally:', error); } }\""
+    "prepare": "npm run build:modules"
   },
   "repository": {
     "type": "git",
@@ -69,6 +68,7 @@
     "./dist/CoCreate-utils.min.js"
   ],
   "devDependencies": {
+    "@cocreate/webpack": "^1.4.3",
     "css-loader": "^5.1.3",
     "esbuild": "^0.25.2",
     "esbuild-loader": "^4.3.0",
@@ -76,5 +76,10 @@
     "webpack": "^5.24.4",
     "webpack-cli": "^4.5.0",
     "webpack-log": "^3.0.1"
+  },
+  "allowScripts": {
+    "@cocreate/webpack@1.4.3": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true
   }
 }
