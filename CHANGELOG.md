@@ -1,3 +1,18 @@
+## [1.42.3](https://github.com/CoCreate-app/CoCreate-utils/compare/v1.42.2...v1.42.3) (2026-07-11)
+
+
+### Bug Fixes
+
+* if query is empty, return true in queryData ([ab76c21](https://github.com/CoCreate-app/CoCreate-utils/commit/ab76c21ff2fad97f9ed11981ffd3120ba8561251))
+* merge conflicts and update package exports for CommonJS support ([259e489](https://github.com/CoCreate-app/CoCreate-utils/commit/259e489cff2f764bfc00a54e2ccd144558a37efd))
+* minor improvements ([d9686fd](https://github.com/CoCreate-app/CoCreate-utils/commit/d9686fda4631c893f3fb360baf28fe941b623d89))
+* package exports and main/module paths for better compatibility ([1c3ee8f](https://github.com/CoCreate-app/CoCreate-utils/commit/1c3ee8f95028804140a5039dbbd67b29d511026e))
+* Remove safeParse exports and imports ([a120faf](https://github.com/CoCreate-app/CoCreate-utils/commit/a120faf2f2e0652afaafa847b9662c36de53b558))
+* removed dist from git ignore to include built files in the repository ([001aa9d](https://github.com/CoCreate-app/CoCreate-utils/commit/001aa9d8fa659897f699b3da43c7c10049e061bb))
+* removed post install and add add packages to apprved list ([08d5ca3](https://github.com/CoCreate-app/CoCreate-utils/commit/08d5ca3cbf1fbc7d095017449c2cd72668227161))
+* root factory variable Module ([2d99013](https://github.com/CoCreate-app/CoCreate-utils/commit/2d9901364d435e8f02a0701a6fa578d55391a683))
+* semantic version handling ([fd9156a](https://github.com/CoCreate-app/CoCreate-utils/commit/fd9156a67728e9382c3ec16b534972ba9ff27b3a))
+
 ## [1.42.2](https://github.com/CoCreate-app/CoCreate-utils/compare/v1.42.1...v1.42.2) (2026-03-04)
 
 
