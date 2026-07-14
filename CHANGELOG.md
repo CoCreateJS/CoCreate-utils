@@ -1,3 +1,16 @@
+# [1.43.0](https://github.com/CoCreate-app/CoCreate-utils/compare/v1.42.3...v1.43.0) (2026-07-14)
+
+
+### Bug Fixes
+
+* update module export to ES6 syntax in release.config.js ([94292aa](https://github.com/CoCreate-app/CoCreate-utils/commit/94292aa0c6cb730a052ed6ae582672b1f9ddb19f))
+
+
+### Features
+
+* add AST evaluation engine and core operator engine in operators.v1.js ([75ac414](https://github.com/CoCreate-app/CoCreate-utils/commit/75ac414a92f6e5a6d1d062c3061010afa639f658))
+* implement universal stateless AST operator engine in operators.ast.js ([432c083](https://github.com/CoCreate-app/CoCreate-utils/commit/432c083b51168419ebb5293508ea132c0ae94dd4))
+
 ## [1.42.3](https://github.com/CoCreate-app/CoCreate-utils/compare/v1.42.2...v1.42.3) (2026-07-11)
 
 
