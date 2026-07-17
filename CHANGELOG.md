@@ -1,3 +1,10 @@
+# [1.44.0](https://github.com/CoCreate-app/CoCreate-utils/compare/v1.43.0...v1.44.0) (2026-07-17)
+
+
+### Features
+
+* update automated workflow and release configuration for improved semantic release handling ([0ed2578](https://github.com/CoCreate-app/CoCreate-utils/commit/0ed2578ab8fa636038076c0a3ec56f4426213deb))
+
 # [1.43.0](https://github.com/CoCreate-app/CoCreate-utils/compare/v1.42.3...v1.43.0) (2026-07-14)
 
 
