@@ -1,6 +1,6 @@
 export default {
   dryRun: false,
-  branches: ["master"],
+  branches: ["main"],
   plugins: [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
