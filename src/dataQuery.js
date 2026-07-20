@@ -1,7 +1,7 @@
 import { getValueFromObject } from "./getValueFromObject.js";
 import { isValidDate } from "./isValidDate.js";
 
-function isEqualArray(arr1, arr2) {
+export function isEqualArray(arr1, arr2) {
 	if (arr1.length !== arr2.length) {
 		return false;
 	}
@@ -13,7 +13,7 @@ function isEqualArray(arr1, arr2) {
 	return true;
 }
 
-function isEqualObject(obj1, obj2) {
+export function isEqualObject(obj1, obj2) {
 	const keys1 = Object.keys(obj1);
 	const keys2 = Object.keys(obj2);
 

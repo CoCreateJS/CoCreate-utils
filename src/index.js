@@ -31,7 +31,7 @@ export { parseTextToHtml } from "./parseTextToHtml.js";
 export { escapeHtml } from "./escapeHtml.js";
 export { cssPath } from "./cssPath.js";
 export { queryElements, checkMediaQueries } from "./queryElements.js";
-export { queryData, searchData, sortData } from "./dataQuery.js";
+export { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./dataQuery.js";
 export { getAttributes, getAttributeNames, setAttributeNames } from "./attributes.js";
 export { clickedElement } from "./clickedElement.js";
 export { processOperators, processOperatorsAsync, customOperators, safeParse } from "./operators.js";
@@ -51,7 +51,7 @@ import { parseTextToHtml } from "./parseTextToHtml.js";
 import { escapeHtml } from "./escapeHtml.js";
 import { cssPath } from "./cssPath.js";
 import { queryElements, checkMediaQueries } from "./queryElements.js";
-import { queryData, searchData, sortData } from "./dataQuery.js";
+import { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./dataQuery.js";
 import { getAttributes, getAttributeNames, setAttributeNames } from "./attributes.js";
 import { clickedElement } from "./clickedElement.js";
 import { processOperators, processOperatorsAsync, customOperators, safeParse } from "./operators.js";
@@ -75,6 +75,8 @@ const utils = {
 	queryData,
 	searchData,
 	sortData,
+	isEqualArray, 
+	isEqualObject,
 	createUpdate,
 	getAttributes,
 	setAttributeNames,
