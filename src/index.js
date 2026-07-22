@@ -17,8 +17,10 @@
  ********************************************************************************/
 
 export { getRelativePath } from "./getRelativePath.js";
+export { getClockOffset } from "./getClockOffset.js";
 export { ObjectId } from "./ObjectId.js";
-export { uid } from "./uid.js";
+export { uuid } from "./uuid.js";
+export { ulid, ulidDecode } from "./ulid.js";
 export { checkValue } from "./checkValue.js";
 export { isValidDate } from "./isValidDate.js";
 export { objectToSearchParams } from "./objectToSearchParams.js";
@@ -34,11 +36,13 @@ export { queryElements, checkMediaQueries } from "./queryElements.js";
 export { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./dataQuery.js";
 export { getAttributes, getAttributeNames, setAttributeNames } from "./attributes.js";
 export { clickedElement } from "./clickedElement.js";
-export { processOperators, processOperatorsAsync, customOperators, safeParse } from "./operators.js";
+export { astSync, astAsync } from "./ast/index.js";
 
 import { getRelativePath } from "./getRelativePath.js";
+import { getClockOffset } from "./getClockOffset.js";
 import { ObjectId } from "./ObjectId.js";
-import { uid } from "./uid.js";
+import { uuid } from "./uuid.js";
+import { ulid, ulidDecode } from "./ulid.js";
 import { checkValue } from "./checkValue.js";
 import { isValidDate } from "./isValidDate.js";
 import { objectToSearchParams } from "./objectToSearchParams.js";
@@ -54,39 +58,39 @@ import { queryElements, checkMediaQueries } from "./queryElements.js";
 import { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./dataQuery.js";
 import { getAttributes, getAttributeNames, setAttributeNames } from "./attributes.js";
 import { clickedElement } from "./clickedElement.js";
-import { processOperators, processOperatorsAsync, customOperators, safeParse } from "./operators.js";
+import { astSync, astAsync } from "./ast/index.js";
 
 const utils = {
-	getRelativePath,
-	ObjectId,
-	uid,
-	checkValue,
-	isValidDate,
-	dotNotationToObject,
-	objectToDotNotation,
-	getValueFromObject,
-	objectToSearchParams,
-	domParser,
-	parseTextToHtml,
-	escapeHtml,
-	cssPath,
-	queryElements,
-	checkMediaQueries,
-	queryData,
-	searchData,
-	sortData,
-	isEqualArray, 
-	isEqualObject,
-	createUpdate,
-	getAttributes,
-	setAttributeNames,
-	getAttributeNames,
-	clickedElement,
-	processOperators,
-	processOperatorsAsync,
-	customOperators,
-	safeParse
-
+    getRelativePath,
+	getClockOffset,
+    ObjectId,
+    uuid,
+    ulid,
+    ulidDecode,
+    checkValue,
+    isValidDate,
+    dotNotationToObject,
+    objectToDotNotation,
+    getValueFromObject,
+    objectToSearchParams,
+    domParser,
+    parseTextToHtml,
+    escapeHtml,
+    cssPath,
+    queryElements,
+    checkMediaQueries,
+    queryData,
+    searchData,
+    sortData,
+    isEqualArray, 
+    isEqualObject,
+    createUpdate,
+    getAttributes,
+    setAttributeNames,
+    getAttributeNames,
+    clickedElement,
+    astSync,
+    astAsync
 };
 
 export default utils;

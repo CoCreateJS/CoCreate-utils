@@ -1,29 +1,48 @@
-import { ObjectId } from "./ObjectId.js";
-import { uid } from "./uid.js";
-import { queryElements } from "./queryElements.js";
-import { getValueFromObject } from "./getValueFromObject.js";
+/********************************************************************************
+ * Copyright (C) 2026 CoCreate and Contributors.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ *
+ ********************************************************************************/
 
-// --- AST EVALUATION ENGINE (safeParse) ---
+import { getValueFromObject } from "../getValueFromObject.js";
+import { queryElements } from "../queryElements.js";
+import { ObjectId } from "../ObjectId.js";
+import { uuid } from "../uuid.js";
+
+// Late-binding references dynamically set at boot time to decouple circular import loops
+let astSyncRef = null;
+let astAsyncRef = null;
+
+export function setASTEvaluators(syncFn, asyncFn) {
+    astSyncRef = syncFn;
+    astAsyncRef = asyncFn;
+}
 
 const mathConstants = { PI: Math.PI, E: Math.E };
 const mathFunctions = {
     abs: Math.abs, ceil: Math.ceil, floor: Math.floor, round: Math.round,
     max: Math.max, min: Math.min, pow: Math.pow, sqrt: Math.sqrt,
     log: Math.log, sin: Math.sin, cos: Math.cos, tan: Math.tan,
-    Number: (v) => Number(v) // Explicit numeric casting
+    Number: (v) => Number(v)
 };
 
-/**
- * Reference class used by safeParse to track object properties for assignments.
- * Prevents dot-notation from just returning values when we need to assign to them (e.g., el.value = 5)
- * Upgraded to handle array contexts: if the object is an array, properties map across all items natively.
- */
 class Ref {
     constructor(obj, prop) {
         this.obj = obj;
         this.prop = prop;
         
-        // Ensure we recognize standard arrays AND DOM collections (NodeList/HTMLCollection)
         let isList = Array.isArray(obj) || 
                      (typeof NodeList !== "undefined" && obj instanceof NodeList) || 
                      (typeof HTMLCollection !== "undefined" && obj instanceof HTMLCollection);
@@ -36,12 +55,9 @@ class Ref {
     }
     get() { 
         if (this.isArrayContext) {
-            // Return the raw Array of extracted properties so the user can use .join() or other array methods
-            let res = this.obj.map(item => item ? item[this.prop] : undefined);
-            return res;
+            return this.obj.map(item => item ? item[this.prop] : undefined);
         }
-        let res = this.obj ? this.obj[this.prop] : undefined; 
-        return res; 
+        return this.obj ? this.obj[this.prop] : undefined; 
     }
     set(val) { 
         if (this.isArrayContext) {
@@ -57,10 +73,7 @@ function unref(val) {
     return val instanceof Ref ? val.get() : val;
 }
 
-/**
- * Parses math, logic, ternaries, dot notation, and property assignments securely.
- */
-function safeParse(expression, registry = new Map()) {
+export function safeParse(expression, registry = new Map()) {
     if (typeof expression !== "string") return expression;
     
     let currentExpr = expression.trim();
@@ -83,7 +96,7 @@ function safeParse(expression, registry = new Map()) {
             consume();
             let right = unref(parseAssignment());
             if (left instanceof Ref) {
-                return left.set(right); // Assign value to the actual object property (or all properties in an array)
+                return left.set(right);
             }
             return right;
         }
@@ -194,12 +207,11 @@ function safeParse(expression, registry = new Map()) {
             return mathFunctions[token](...args);
         }
 
-        // --- Context & Object Registry Traversal ---
         let path = token.split(".");
         let baseToken = path[0];
         let val;
 
-        if (registry.has(baseToken)) {
+        if (registry && typeof registry.get === 'function' && registry.has(baseToken)) {
             val = registry.get(baseToken);
         } else if (typeof window !== "undefined" && window[baseToken]) {
             val = window[baseToken];
@@ -208,7 +220,6 @@ function safeParse(expression, registry = new Map()) {
         }
 
         if (path.length === 1) {
-            // Support explicit call for root variables
             if (peek() === "(" && typeof val === "function") {
                 consume();
                 let args = [];
@@ -227,7 +238,6 @@ function safeParse(expression, registry = new Map()) {
 
         for (let i = 1; i < path.length - 1; i++) {
             if (val !== null && val !== undefined) {
-                // Support deep traversal across arrays
                 let isList = Array.isArray(val) || (typeof NodeList !== "undefined" && val instanceof NodeList) || (typeof HTMLCollection !== "undefined" && val instanceof HTMLCollection);
                 if (isList && !(path[i] in val)) {
                     val = Array.from(val).map(item => item ? item[path[i]] : undefined);
@@ -241,7 +251,6 @@ function safeParse(expression, registry = new Map()) {
 
         let ref = new Ref(val, path[path.length - 1]);
 
-        // Support explicit method calls (e.g., obj.method(arg))
         if (peek() === "(") {
             consume();
             let args = [];
@@ -254,24 +263,15 @@ function safeParse(expression, registry = new Map()) {
             }
             if (peek() === ")") consume();
             
-            // Map the method call across all items if it's an array context
             if (ref.isArrayContext) {
-                let results = ref.obj.map(item => {
+                return ref.obj.map(item => {
                     let func = item ? item[ref.prop] : undefined;
-                    if (func !== undefined && typeof func !== "function") {
-                        console.warn(`Operator Engine: '${ref.prop}' is not a valid function on the target element.`);
-                    }
-                    let res = typeof func === "function" ? func.apply(item, args) : undefined;
-                    return res;
+                    return typeof func === "function" ? func.apply(item, args) : undefined;
                 });
-                return results; // Return the natively mapped Array so user can process it!
             } else {
                 let func = ref.obj ? ref.obj[ref.prop] : undefined;
                 if (typeof func === "function") {
-                    let res = func.apply(ref.obj, args);
-                    return res;
-                } else {
-                    console.warn(`Operator Engine: Method '${ref.prop}' does not exist on the target object.`);
+                    return func.apply(ref.obj, args);
                 }
             }
         }
@@ -280,45 +280,43 @@ function safeParse(expression, registry = new Map()) {
     }
 
     try {
-        const result = parse();
-        return unref(result);
+        return unref(parse());
     } catch (error) {
         console.warn(`safeParse error: ${error.message} (Expr: "${expression}")`, error);
         return null;
     }
 }
 
-
-// --- CORE OPERATOR ENGINE ---
-
-const customOperators = new Map(
+export const customOperators = new Map(
     Object.entries({
-        $organization_id: () => localStorage.getItem("organization_id"),
-        $user_id: () => localStorage.getItem("user_id"),
-        $client_id: () => localStorage.getItem("clientId"),
-        $session_id: () => localStorage.getItem("session_id"),
-        $this: function() { return this; },
-        $value: function() { return this && typeof this.getValue === 'function' ? this.getValue() : ""; },
-        $innerWidth: () => window.innerWidth,
-        $innerHeight: () => window.innerHeight,
-        $href: () => window.location.href.replace(/\/$/, ""),
-        $origin: () => window.location.origin,
-        $protocol: () => window.location.protocol,
-        $hostname: () => window.location.hostname,
-        $host: () => window.location.host,
-        $port: () => window.location.port,
-        $pathname: () => window.location.pathname.replace(/\/$/, ""),
-        $hash: () => window.location.hash,
-        $subdomain: () => getSubdomain() || "",
+        $organization_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("organization_id") : "",
+        $user_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("user_id") : "",
+        $client_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("clientId") : "",
+        $session_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("session_id") : "",
+        $this: function() { return this.element; },
+        $value: function() { return this.element && typeof this.element.getValue === 'function' ? this.element.getValue() : ""; },
+        $innerWidth: () => typeof window !== 'undefined' ? window.innerWidth : 0,
+        $innerHeight: () => typeof window !== 'undefined' ? window.innerHeight : 0,
+        $href: () => typeof window !== 'undefined' ? window.location.href.replace(/\/$/, "") : "",
+        $origin: () => typeof window !== 'undefined' ? window.location.origin : "",
+        $protocol: () => typeof window !== 'undefined' ? window.location.protocol : "",
+        $hostname: () => typeof window !== 'undefined' ? window.location.hostname : "",
+        $host: () => typeof window !== 'undefined' ? window.location.host : "",
+        $port: () => typeof window !== 'undefined' ? window.location.port : "",
+        $pathname: () => typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, "") : "",
+        $hash: () => typeof window !== 'undefined' ? window.location.hash : "",
+        $subdomain: () => {
+            if (typeof window === 'undefined') return "";
+            const parts = window.location.hostname.split('.');
+            return parts.length > 2 ? parts[0] : "";
+        },
         $object_id: () => ObjectId().toString(),
         "ObjectId()": () => ObjectId().toString(),
         
-        // Unwrap query results correctly: Returns only the single first item
         $query: function(selector) {
-            let element = this;
+            let element = this.element;
             if (typeof selector === 'string') {
                 selector = selector.trim();
-                // Strip quotes out of the selector in case they were passed (e.g., $query('#id1'))
                 if ((selector.startsWith("'") && selector.endsWith("'")) || 
                     (selector.startsWith('"') && selector.endsWith('"'))) {
                     selector = selector.slice(1, -1);
@@ -327,43 +325,67 @@ const customOperators = new Map(
             try {
                 let results = queryElements({ element, selector });
                 if (!results || results.length === 0) return undefined; 
-                return results[0]; // Strict single item return
+                return results[0];
             } catch (error) {
                 console.warn(`Operator Engine: Invalid $query selector => "${selector}"`, error);
                 return undefined; 
             }
         },
-        // Unwrap query results correctly: Always returns an array 
         $queryAll: function(selector) {
-            let element = this;
+            let element = this.element;
             if (typeof selector === 'string') {
                 selector = selector.trim();
-                // Strip quotes out of the selector in case they were passed (e.g., $queryAll('.items'))
                 if ((selector.startsWith("'") && selector.endsWith("'")) || 
                     (selector.startsWith('"') && selector.endsWith('"'))) {
                     selector = selector.slice(1, -1);
                 }
-                
-                // Safely ignore queries targeting $document to prevent querySelector crashes
                 if (selector.includes('$document')) return [];
             }
             try {
                 let results = queryElements({ element, selector });
                 if (!results || results.length === 0) return []; 
-                // Always cast to array so Ref mapping handles methods uniformly
                 return Array.from(results);
             } catch (error) {
                 console.warn(`Operator Engine: Invalid $queryAll selector => "${selector}"`, error);
                 return []; 
             }
         },
-        $eval: function(expression) { return safeParse(expression); },
+        $eval: function(expression) { 
+            return safeParse(expression, this.registry); 
+        },
+        "$": function(expression) {
+            return safeParse(expression, this.registry);
+        },
+        $ast: function(expression) {
+            if (!astSyncRef) {
+                console.warn("[Operator Engine] AST Evaluator reference not registered.");
+                return expression;
+            }
+            return astSyncRef({
+                executeAST: expression,
+                node: this.element,
+                registry: this.registry
+            });
+        },
+        $astAsync: async function(expression) {
+            if (!astAsyncRef) {
+                console.warn("[Operator Engine] AST Async Evaluator reference not registered.");
+                return expression;
+            }
+            return await astAsyncRef({
+                executeAST: expression,
+                node: this.element,
+                registry: this.registry
+            });
+        },
         $relativePath: () => {
+            if (typeof window === 'undefined') return "./";
             let currentPath = window.location.pathname.replace(/\/[^\/]*$/, ""); 
             let depth = currentPath.split("/").filter(Boolean).length;
             return depth > 0 ? "../".repeat(depth) : "./";
         },
         $path: () => {
+            if (typeof window === 'undefined') return "";
             let path = window.location.pathname;
             if (path.split("/").pop().includes(".")) path = path.replace(/\/[^\/]+$/, "/");
             return path === "/" ? "" : path;
@@ -373,7 +395,7 @@ const customOperators = new Map(
             return getValueFromObject(obj, key);
         },
         $setValue: function(...args) {
-            return typeof this.setValue === 'function' ? this.setValue(...args) || "" : "";
+            return this.element && typeof this.element.setValue === 'function' ? this.element.setValue(...args) || "" : "";
         },
         $true: () => true,
         $false: () => false,
@@ -389,7 +411,14 @@ const customOperators = new Map(
             if (isNaN(number)) return String(numCandidate ?? "");
             return new Intl.NumberFormat(locale, options).format(number);
         },
-        $uid: function(prefix) { return uid(prefix) || ""; },
+        $uuid: function(prefix) { return uuid(prefix) || ""; },
+        
+        $add: function(value) {
+            return Array.isArray(value) ? value.flat().reduce((a, b) => Number(a) + Number(b), 0) : Number(value) || 0;
+        },
+        $concat: function(value) {
+            return Array.isArray(value) ? value.flat().map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join('') : String(value ?? "");
+        }
     })
 );
 
@@ -409,7 +438,6 @@ const findInnermostOperator = (expression) => {
     let stack = [];
     let inSQ = false, inDQ = false;
 
-    // 1. Capture all parenthesis pairs accurately (The Parenthesis-First "Animals" boundary)
     for (let i = 0; i < expression.length; i++) {
         const char = expression[i];
         if (char === '\\') { i++; continue; }
@@ -427,7 +455,6 @@ const findInnermostOperator = (expression) => {
         }
     }
 
-    // Sort by depth descending (innermost first), then by start descending (right-most first)
     parens.sort((a, b) => b.depth - a.depth || b.start - a.start);
 
     function stripParentheses(str) {
@@ -447,35 +474,29 @@ const findInnermostOperator = (expression) => {
         return result;
     }
 
-    // 2. Look to the left of the innermost parentheses to find the keyword operator
     for (const p of parens) {
-        // We safely isolate ONLY what is inside the parens, bypassing the need for string replacements
         const insideParens = expression.substring(p.start + 1, p.end).trim();
         const leftPart = expression.substring(0, p.start);
-
-        // Check for an operator keyword directly attached to the left of the `(`
-        const match = leftPart.match(/(?:^|[^\w\$])(\$[\w\-]+|ObjectId\b)\s*$/);
+        
+        const match = leftPart.match(/(?:^|[^\w\$])(\$[\w\-]*|ObjectId\b)\s*$/);
         
         if (match) {
             let opName = match[1] === 'ObjectId' ? 'ObjectId()' : match[1];
-            if (customOperators.has(opName) || /^\$[\w\-]+$/.test(opName)) {
-                // Pinpoint exactly where the operator string began
+            if (customOperators.has(opName) || /^\$[\w\-]*$/.test(opName)) {
                 const spacesMatch = leftPart.match(/\s*$/);
                 const spacesAtEnd = spacesMatch ? spacesMatch[0].length : 0;
                 const fullMatchStart = match.index + match[0].length - match[1].length - spacesAtEnd;
                 
-                const resultBlock = { 
+                return { 
                     operator: opName, 
-                    args: insideParens, // Perfectly isolated arguments, handling nested chains
+                    args: insideParens, 
                     fullMatch: expression.substring(fullMatchStart, p.end + 1),
                     rawContent: expression.substring(fullMatchStart, p.end + 1)
                 };
-                return resultBlock;
             }
         }
     }
 
-    // 3. Fallback: Find bare operators (like $this) that have no parentheses attached
     const bareRegex = /(?:^|[^\w\$])(\$[\w\-]+|ObjectId\b)/g;
     let bareMatch;
     let bareCandidates = [];
@@ -483,8 +504,6 @@ const findInnermostOperator = (expression) => {
     while ((bareMatch = bareRegex.exec(expression)) !== null) {
         let possibleOp = bareMatch[1];
         let opName = possibleOp === 'ObjectId' ? 'ObjectId()' : possibleOp;
-        
-        // Ensure it isnt followed by a `(` (because if it was, it would have been caught above)
         let remainder = expression.substring(bareMatch.index + bareMatch[0].length);
         if (!/^\s*\(/.test(remainder)) {
             if (customOperators.has(opName) || /^\$[\w\-]+$/.test(opName)) {
@@ -504,98 +523,193 @@ const findInnermostOperator = (expression) => {
         return bareCandidates[0];
     }
 
-    const defaultFallback = { operator: null, args: stripParentheses(expression), rawContent: expression.trim() };
-    return defaultFallback;
+    return { operator: null, args: stripParentheses(expression), rawContent: expression.trim() };
 };
 
-function processOperators(element, value, exclude = [], parent, params = [], objectRegistry = new Map()) {
-    if (typeof value !== "string" || (!value.includes("$") && !value.includes("ObjectId()"))) return value;
-    let processedValue = value, hasPromise = false, unresolvedTokens = new Map();
-    while (processedValue.includes("$") || processedValue.includes("ObjectId()")) {
-        const paramMatch = processedValue.match(/^\$\$PARAM_(\d+)\$\$/);
-        if (paramMatch && Array.isArray(params) && params.length > 0) {
-            const index = parseInt(paramMatch[1], 10);
-            if (index < params.length) { processedValue = processedValue.replace(paramMatch[0], params[index]); continue; }
-        }
-        const { operator, args, rawContent, fullMatch } = findInnermostOperator(processedValue);
-        if (!operator || (operator === "$param" && !args)) break;
-        const textToReplace = fullMatch || rawContent;
-        if (exclude.includes(operator)) {
-            const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
-            unresolvedTokens.set(token, textToReplace);
-            processedValue = processedValue.replace(textToReplace, token);
-            continue;
-        }
-        let resolvedValue = resolveOperator(element, operator, args, parent, params, objectRegistry);
-        if (resolvedValue === undefined) {
-            const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
-            unresolvedTokens.set(token, textToReplace);
-            processedValue = processedValue.replace(textToReplace, token);
-            continue;
-        }
-        if (resolvedValue instanceof Promise) {
-            const paramIndex = params.length;
-            params.push(resolvedValue); 
-            processedValue = processedValue.replace(textToReplace, `$$PARAM_${paramIndex}$$`);
-            hasPromise = true;
-            break;
-        }
-        if (params.some((p) => p instanceof Promise)) { hasPromise = true; break; }
-        let replacement = "";
-        if (operator === "$param") params.push(resolvedValue);
-        else if (resolvedValue !== null && (typeof resolvedValue === "object" || typeof resolvedValue === "function")) {
-            const token = `__OBJ_${objectRegistry.size}__`;
-            objectRegistry.set(token, resolvedValue);
-            replacement = token;
-        } else replacement = resolvedValue ?? "";
-        if (processedValue === textToReplace) { processedValue = replacement; break; }
-        processedValue = processedValue.replace(textToReplace, replacement);
-    }
+function processValues(elements, operator, args, parent, objectRegistry) {
+    let customOp = customOperators.get(operator);
+    let results = [];
+    let hasValidProperty = customOp ? true : false;
     
-    // Restore unresolved exclusions (Reverse-order replaces ensure perfectly unnested loops)
-    if (typeof processedValue === "string") {
-        let keys = Array.from(unresolvedTokens.keys()).reverse();
-        for (const token of keys) {
-            processedValue = processedValue.replaceAll(token, unresolvedTokens.get(token));
-        }
-        
-        // Native method and property chaining evaluation
-        // 1. If the ENTIRE string is a pure method/property chain (e.g. __OBJ_0__.getValue() )
-        const exactMethodMatch = processedValue.match(/^__OBJ_\d+__(?:\.[a-zA-Z0-9_]+)+(?:\(.*\))?$/);
-        if (exactMethodMatch) {
-            const parsed = safeParse(processedValue, objectRegistry);
-            // DO NOT LEAK tokens to the UI. Fallback to "" instead of the processedValue placeholder if it fails.
-            return parsed !== null && parsed !== undefined ? parsed : ""; 
-        }
-        
-        // 2. Unpack pure object variables
-        const exactMatch = processedValue.match(/^__OBJ_(\d+)__$/);
-        if (exactMatch && objectRegistry.has(processedValue)) {
-            processedValue = objectRegistry.get(processedValue);
-        } else {
-            // 3. Inline interpolation for methods/properties (e.g., "User clicked __OBJ_0__.getValue()")
-            const objRegex = /__OBJ_\d+__(?:\.[a-zA-Z0-9_]+)+(?:\([^)]*\))?/g;
-            if (processedValue.includes("__OBJ_")) {
-                processedValue = processedValue.replace(objRegex, (match) => {
-                    const parsed = safeParse(match, objectRegistry);
-                    // DO NOT LEAK tokens to the UI. Fallback to "" instead of the match placeholder if it fails.
-                    return parsed !== null && parsed !== undefined ? parsed : "";
-                });
+    for (const el of elements) {
+        if (!el) continue;
+        let rawValue = customOp;
+        const propName = customOp ? null : operator.substring(1);
+        if (!customOp) {
+            if (propName in el) { 
+                hasValidProperty = true; 
+                rawValue = el[propName]; 
+            } else {
+                continue;
             }
         }
+
+        let preparedArgs = [];
+        const originalWasArray = Array.isArray(args);
+        const hasArgs = originalWasArray || args !== undefined;
+
+        if (originalWasArray) {
+            preparedArgs = Array.from(args);
+        } else if (typeof args === "string") {
+            if (args === "") {
+                preparedArgs = [""];
+            } else {
+                let parsedArgs = [];
+                let currentArg = '';
+                let inSQ = false, inDQ = false;
+                let depth = 0;
+                
+                for (let i = 0; i < args.length; i++) {
+                    const char = args[i];
+                    if (char === '\\') { 
+                        currentArg += char; 
+                        if (i + 1 < args.length) currentArg += args[++i]; 
+                        continue; 
+                    }
+                    if (char === "'" && !inDQ) inSQ = !inSQ;
+                    if (char === '"' && !inSQ) inDQ = !inDQ;
+                    
+                    if (!inSQ && !inDQ) {
+                        if (char === '(' || char === '[' || char === '{') depth++;
+                        else if (char === ')' || char === ']' || char === '}') depth--;
+                    }
+                    
+                    if (char === ',' && !inSQ && !inDQ && depth === 0) {
+                        parsedArgs.push(currentArg.trim());
+                        currentArg = '';
+                    } else {
+                        currentArg += char;
+                    }
+                }
+                if (currentArg.trim() !== "") parsedArgs.push(currentArg.trim());
+
+                preparedArgs = parsedArgs.map(arg => {
+                    if (/^__OBJ_\d+__$/.test(arg) && objectRegistry && objectRegistry.has(arg)) {
+                        return objectRegistry.get(arg);
+                    }
+                    if (!isNaN(arg) && arg.trim() !== "") {
+                        return Number(arg);
+                    }
+                    if (arg === "true") return true;
+                    if (arg === "false") return false;
+                    if (arg === "null") return null;
+                    if (arg === "undefined") return undefined;
+                    
+                    if ((arg.startsWith("'") && arg.endsWith("'")) || (arg.startsWith('"') && arg.endsWith('"'))) {
+                        let unquoted = arg.slice(1, -1);
+                        if (unquoted.includes("__OBJ_")) {
+                            return unquoted.replace(/__OBJ_\d+__/g, (match) => {
+                                if (objectRegistry && objectRegistry.has(match)) {
+                                    let val = objectRegistry.get(match);
+                                    return typeof val === "object" ? JSON.stringify(val) : String(val);
+                                }
+                                return match;
+                            });
+                        }
+                        return unquoted;
+                    }
+                    
+                    if (typeof arg === "string" && arg.includes("__OBJ_")) {
+                        return arg.replace(/__OBJ_\d+__/g, (match) => {
+                            if (objectRegistry && objectRegistry.has(match)) {
+                                let val = objectRegistry.get(match);
+                                return typeof val === "object" ? JSON.stringify(val) : String(val);
+                            }
+                            return match;
+                        });
+                    }
+                    return arg;
+                });
+            }
+        } else if (hasArgs) {
+            preparedArgs = [args];
+        }
+
+        if (originalWasArray) {
+            preparedArgs = preparedArgs.map(a => {
+                if (typeof a === 'string' && /^__OBJ_\d+__$/.test(a) && objectRegistry && objectRegistry.has(a)) {
+                    return objectRegistry.get(a);
+                }
+                return a;
+            });
+        }
+
+        let resolvedArgs;
+        if (originalWasArray || preparedArgs.length > 1) {
+            resolvedArgs = preparedArgs;
+        } else if (preparedArgs.length === 1) {
+            resolvedArgs = preparedArgs[0];
+        } else {
+            resolvedArgs = undefined;
+        }
+
+        if (typeof rawValue === "function") {
+            try {
+                let execCtx = { element: el, registry: objectRegistry };
+                if (isConstructor(rawValue, propName)) {
+                    if (Array.isArray(resolvedArgs)) {
+                        rawValue = new rawValue(...resolvedArgs);
+                    } else if (resolvedArgs !== undefined) {
+                        rawValue = new rawValue(resolvedArgs);
+                    } else {
+                        rawValue = new rawValue();
+                    }
+                } else {
+                    if (Array.isArray(resolvedArgs)) {
+                        rawValue = rawValue.apply(execCtx, resolvedArgs);
+                    } else if (resolvedArgs !== undefined) {
+                        rawValue = rawValue.call(execCtx, resolvedArgs);
+                    } else {
+                        rawValue = rawValue.call(execCtx);
+                    }
+                }
+            } catch (err) {
+                console.warn(`Operator Engine: Failed to execute method or operator "${operator}"`, err);
+                continue;
+            }
+        } else if (hasArgs && propName) {
+            try {
+                el[propName] = resolvedArgs;
+                rawValue = el[propName];
+            } catch (err) {
+                console.warn(`Operator Engine: Failed to assign property "${propName}"`, err);
+                continue;
+            }
+        }
+
+        if (rawValue !== undefined && rawValue !== null) {
+            results.push(rawValue);
+        }
     }
     
-    if (hasPromise) return { value: processedValue, params, objectRegistry };
-    return processedValue;
+    if (!hasValidProperty) return undefined;
+    if (results.length === 0) return "";
+    if (results.length === 1) return results[0];
+    return results;
 }
 
-async function processOperatorsAsync(element, value, exclude = [], parent, params = [], objectRegistry = new Map()) {
-    let result = processOperators(element, value, exclude, parent, params, objectRegistry);
-    while (typeof result === "object" && result.params) {
-        const resolvedParams = await Promise.all(result.params);
-        result = processOperators(element, result.value, exclude, parent, resolvedParams, result.objectRegistry || objectRegistry);
+export function unpackTokens(val, registry) {
+    if (typeof val === "string") {
+        const exactMatch = val.match(/^__OBJ_(\d+)__$/);
+        if (exactMatch && registry.has(val)) {
+            return registry.get(val);
+        }
+        if (val.includes("__OBJ_")) {
+            return val.replace(/__OBJ_\d+__(?:\.[a-zA-Z0-9_]+)*(?:\([^)]*\))?/g, (match) => {
+                const parsed = safeParse(match, registry);
+                if (parsed !== null && parsed !== undefined) {
+                    return typeof parsed === "object" ? JSON.stringify(parsed) : String(parsed);
+                }
+                const baseTokenMatch = match.match(/^__OBJ_\d+__/);
+                if (baseTokenMatch && registry.has(baseTokenMatch[0])) {
+                    const baseVal = registry.get(baseTokenMatch[0]);
+                    return typeof baseVal === "object" ? JSON.stringify(baseVal) : String(baseVal);
+                }
+                return "";
+            });
+        }
     }
-    return result;
+    return val;
 }
 
 function resolveOperator(element, operator, args, parent, params, objectRegistry) {
@@ -609,10 +723,9 @@ function resolveOperator(element, operator, args, parent, params, objectRegistry
         const objMatch = args.match(/^__OBJ_(\d+)__$/);
         if (objMatch && objectRegistry.has(args)) {
             let registeredVal = objectRegistry.get(args);
-            // Ensure unrolled array natively
             let isList = Array.isArray(registeredVal) || (typeof NodeList !== "undefined" && registeredVal instanceof NodeList) || (typeof HTMLCollection !== "undefined" && registeredVal instanceof HTMLCollection);
             targetElements = isList ? Array.from(registeredVal) : [registeredVal];
-        } else if (!customOperators.has(operator) &&  (operator === "$query")) {
+        } else if (!customOperators.has(operator) && (operator === "$query")) {
             let qResults = queryElements({ element, selector: args });
             if (!qResults) {
                 targetElements = [];
@@ -631,192 +744,76 @@ function resolveOperator(element, operator, args, parent, params, objectRegistry
     return value;
 }
 
-function processValues(elements, operator, args, parent, objectRegistry) {
-    let customOp = customOperators.get(operator);
-
-    let results = [];
-    let hasValidProperty = customOp ? true : false;
+export function processOperators(element, value, exclude = [], parent, params = [], objectRegistry = new Map()) {
+    if (typeof value !== "string" || (!value.includes("$") && !value.includes("ObjectId()"))) return value;
+    let processedValue = value, hasPromise = false, unresolvedTokens = new Map();
     
-    for (const el of elements) {
-        if (!el) continue;
-        let rawValue = customOp;
-        const propName = customOp ? null : operator.substring(1);
-        if (!customOp) {
-            if (propName in el) { 
-                hasValidProperty = true; 
-                rawValue = el[propName]; 
-            }
-            else {
-                continue;
+    while (processedValue.includes("$") || processedValue.includes("ObjectId()")) {
+        const paramMatch = processedValue.match(/^\$$PARAM_(\d+)\$\$/);
+        if (paramMatch && Array.isArray(params) && params.length > 0) {
+            const index = parseInt(paramMatch[1], 10);
+            if (index < params.length) { 
+                processedValue = processedValue.replace(paramMatch[0], params[index]); 
+                continue; 
             }
         }
-
-        // --- 1. RECONSTRUCT THE "GHOST" STRUCTURE (Tokens -> Actual JS Types) ---
-        let preparedArgs = [];
-        const originalWasArray = Array.isArray(args);
-        const hasArgs = originalWasArray || args !== undefined;
-
-        if (originalWasArray) {
-            preparedArgs = Array.from(args);
-        } else if (typeof args === "string") {
-            if (args === "") {
-                preparedArgs = [""]; // Explicitly retain empty string arguments
-            } else {
-                // Smart parse for comma-separated arguments respecting strings and brackets
-                let parsedArgs = [];
-                let currentArg = '';
-                let inSQ = false, inDQ = false;
-                let depth = 0;
-                
-                for (let i = 0; i < args.length; i++) {
-                    const char = args[i];
-                    if (char === '\\') { 
-                        currentArg += char; 
-                        if (i + 1 < args.length) currentArg += args[++i]; 
-                        continue; 
-                    }
-                    if (char === "'" && !inDQ) inSQ = !inSQ;
-                    if (char === '"' && !inSQ) inDQ = !inDQ;
-                    
-                    // Keep track of brackets and parens grouping so we don't accidentally split them inside
-                    if (!inSQ && !inDQ) {
-                        if (char === '(' || char === '[' || char === '{') depth++;
-                        else if (char === ')' || char === ']' || char === '}') depth--;
-                    }
-                    
-                    if (char === ',' && !inSQ && !inDQ && depth === 0) {
-                        parsedArgs.push(currentArg.trim());
-                        currentArg = '';
-                    } else {
-                        currentArg += char;
-                    }
-                }
-                if (currentArg.trim() !== "") parsedArgs.push(currentArg.trim());
-
-                // Reconstruct actual JavaScript types
-                preparedArgs = parsedArgs.map(arg => {
-                    // 1. Direct object token match (brings back exactly the array, obj, or variable!)
-                    if (/^__OBJ_\d+__$/.test(arg) && objectRegistry && objectRegistry.has(arg)) {
-                        return objectRegistry.get(arg);
-                    }
-                    
-                    // 2. Numbers
-                    if (!isNaN(arg) && arg.trim() !== "") {
-                        return Number(arg);
-                    }
-                    
-                    // 3. Booleans and Null
-                    if (arg === "true") return true;
-                    if (arg === "false") return false;
-                    if (arg === "null") return null;
-                    if (arg === "undefined") return undefined;
-                    
-                    // 4. Strings with quotes (strip outer quotes reliably)
-                    if ((arg.startsWith("'") && arg.endsWith("'")) || (arg.startsWith('"') && arg.endsWith('"'))) {
-                        let unquoted = arg.slice(1, -1);
-                        if (unquoted.includes("__OBJ_")) {
-                            return unquoted.replace(/__OBJ_\d+__/g, (match) => {
-                                if (objectRegistry && objectRegistry.has(match)) {
-                                    let val = objectRegistry.get(match);
-                                    return typeof val === "object" ? JSON.stringify(val) : String(val);
-                                }
-                                return match;
-                            });
-                        }
-                        return unquoted;
-                    }
-                    
-                    // 5. Inline token replacements for mixed strings (e.g., "Welcome __OBJ_1__")
-                    if (typeof arg === "string" && arg.includes("__OBJ_")) {
-                        return arg.replace(/__OBJ_\d+__/g, (match) => {
-                            if (objectRegistry && objectRegistry.has(match)) {
-                                let val = objectRegistry.get(match);
-                                return typeof val === "object" ? JSON.stringify(val) : String(val);
-                            }
-                            return match;
-                        });
-                    }
-                    
-                    // Fallback literal string
-                    return arg;
-                });
-            }
-        } else if (hasArgs) {
-            preparedArgs = [args];
+        
+        const { operator, args, rawContent, fullMatch } = findInnermostOperator(processedValue);
+        if (!operator || (operator === "$param" && !args)) break;
+        
+        const textToReplace = fullMatch || rawContent;
+        if (exclude.includes(operator)) {
+            const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
+            unresolvedTokens.set(token, textToReplace);
+            processedValue = processedValue.replace(textToReplace, token);
+            continue;
         }
-
-        // Extra safety: Make sure tokens passed directly as Array items are mapped
-        if (originalWasArray) {
-            preparedArgs = preparedArgs.map(a => {
-                if (typeof a === 'string' && /^__OBJ_\d+__$/.test(a) && objectRegistry && objectRegistry.has(a)) {
-                    return objectRegistry.get(a);
-                }
-                return a;
-            });
+        
+        let resolvedValue = resolveOperator(element, operator, args, parent, params, objectRegistry);
+        if (resolvedValue === undefined) {
+            const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
+            unresolvedTokens.set(token, textToReplace);
+            processedValue = processedValue.replace(textToReplace, token);
+            continue;
         }
-
-        // Create the resolvedArgs shape the engine natively expects
-        let resolvedArgs;
-        if (originalWasArray || preparedArgs.length > 1) {
-            resolvedArgs = preparedArgs;
-        } else if (preparedArgs.length === 1) {
-            resolvedArgs = preparedArgs[0];
-        } else {
-            resolvedArgs = undefined;
+        if (resolvedValue instanceof Promise) {
+            const paramIndex = params.length;
+            params.push(resolvedValue); 
+            processedValue = processedValue.replace(textToReplace, `$$PARAM_${paramIndex}$$`);
+            hasPromise = true;
+            break;
         }
-
-        // --- 2. EXECUTE OR ASSIGN ---
-        if (typeof rawValue === "function") {
-            try {
-                if (isConstructor(rawValue, propName)) {
-                    if (Array.isArray(resolvedArgs)) {
-                        rawValue = new rawValue(...resolvedArgs);
-                    } else if (resolvedArgs !== undefined) {
-                        rawValue = new rawValue(resolvedArgs);
-                    } else {
-                        rawValue = new rawValue();
-                    }
-                } else {
-                    if (Array.isArray(resolvedArgs)) {
-                        rawValue = rawValue.apply(el, resolvedArgs); // Bind context correctly to element!
-                    } else if (resolvedArgs !== undefined) {
-                        rawValue = rawValue.call(el, resolvedArgs);
-                    } else {
-                        rawValue = rawValue.call(el);
-                    }
-                }
-            } catch (err) {
-                console.warn(`Operator Engine: Failed to execute method or operator "${operator}"`, err);
-                continue; // Skip this element's value if execution failed
-            }
-        } else if (hasArgs && propName) {
-            // PROPERTY ASSIGNMENT
-            try {
-                el[propName] = resolvedArgs;
-                rawValue = el[propName]; // Read it back to ensure success/validate formatting
-            } catch (err) {
-                console.warn(`Operator Engine: Failed to assign property "${propName}"`, err);
-                continue;
-            }
-        }
-
-        if (rawValue !== undefined && rawValue !== null) {
-            results.push(rawValue);
-        }
+        if (params.some((p) => p instanceof Promise)) { hasPromise = true; break; }
+        
+        let replacement = "";
+        if (operator === "$param") params.push(resolvedValue);
+        else if (resolvedValue !== null && (typeof resolvedValue === "object" || typeof resolvedValue === "function")) {
+            const token = `__OBJ_${objectRegistry.size}__`;
+            objectRegistry.set(token, resolvedValue);
+            replacement = token;
+        } else replacement = resolvedValue ?? "";
+        
+        if (processedValue === textToReplace) { processedValue = replacement; break; }
+        processedValue = processedValue.replace(textToReplace, replacement);
     }
     
-    if (!hasValidProperty) return undefined;
-    if (results.length === 0) return ""; // Explicitly return empty string if elements are found but have no matches to prevent Token masking.
+    if (typeof processedValue === "string") {
+        let keys = Array.from(unresolvedTokens.keys()).reverse();
+        for (const token of keys) {
+            processedValue = processedValue.replaceAll(token, unresolvedTokens.get(token));
+        }
+        processedValue = unpackTokens(processedValue, objectRegistry);
+    }
     
-    // Return the array wrapper (even for length 1) to ensure .map array methods remain accessible!
-    if (results.length === 1) return results[0];
-    return results;
+    if (hasPromise) return { value: processedValue, params, objectRegistry };
+    return processedValue;
 }
 
-function getSubdomain() {
-    const hostname = window.location.hostname, parts = hostname.split(".");
-    if (parts.length > 2 && isNaN(parseInt(parts[parts.length - 1]))) return parts.slice(0, parts.length - 2).join(".");
-    return null;
+export async function processOperatorsAsync(element, value, exclude = [], parent, params = [], objectRegistry = new Map()) {
+    let result = processOperators(element, value, exclude, parent, params, objectRegistry);
+    while (typeof result === "object" && result.params) {
+        const resolvedParams = await Promise.all(result.params);
+        result = processOperators(element, result.value, exclude, parent, resolvedParams, result.objectRegistry || objectRegistry);
+    }
+    return result;
 }
-
-export { processOperators, processOperatorsAsync, customOperators, safeParse };
