@@ -15,6 +15,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  ********************************************************************************/
 
+import getCountryLocation from './getCountryLocation.js';
+import cloudProviders from './cloudProviders.js';
+
 // Strict validation patterns for IPv4 and IPv6 addresses
 const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 const IPV6_REGEX = /^(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}$/;
@@ -39,15 +42,15 @@ const PROVIDERS = [
             region: data.region,
             country: data.country_name,
             countryCode: data.country_code,
-            latitude: data.latitude ? parseFloat(data.latitude) : null,
-            longitude: data.longitude ? parseFloat(data.longitude) : null,
+            latitude: (data.latitude != null && data.latitude !== "") ? parseFloat(data.latitude) : null,
+            longitude: (data.longitude != null && data.longitude !== "") ? parseFloat(data.longitude) : null,
             timezone: data.timezone,
             org: data.org || data.asn,
         })
     },
     {
         name: "ip-api.com",
-        url: "http://ip-api.com/json/?fields=status,message,country,countryCode,region,regionName,city,lat,lon,timezone,isp,org,query",
+        url: "https://ip-api.com/json/?fields=status,message,country,countryCode,region,regionName,city,lat,lon,timezone,isp,org,query",
         parser: (data) => {
             if (data.status !== "success") return null;
             return {
@@ -56,8 +59,8 @@ const PROVIDERS = [
                 region: data.regionName,
                 country: data.country,
                 countryCode: data.countryCode,
-                latitude: data.lat ? parseFloat(data.lat) : null,
-                longitude: data.lon ? parseFloat(data.lon) : null,
+                latitude: (data.lat != null && data.lat !== "") ? parseFloat(data.lat) : null,
+                longitude: (data.lon != null && data.lon !== "") ? parseFloat(data.lon) : null,
                 timezone: data.timezone,
                 org: data.org || data.isp,
             };
@@ -74,8 +77,8 @@ const PROVIDERS = [
                 region: data.region,
                 country: data.country,
                 countryCode: data.country_code,
-                latitude: data.latitude ? parseFloat(data.latitude) : null,
-                longitude: data.longitude ? parseFloat(data.longitude) : null,
+                latitude: (data.latitude != null && data.latitude !== "") ? parseFloat(data.latitude) : null,
+                longitude: (data.longitude != null && data.longitude !== "") ? parseFloat(data.longitude) : null,
                 timezone: data.timezone?.id,
                 org: data.connection?.isp || data.connection?.org,
             };
@@ -92,8 +95,8 @@ const PROVIDERS = [
                 region: data.region,
                 country: data.country?.name,
                 countryCode: data.country?.code,
-                latitude: data.location?.lat ? parseFloat(data.location.lat) : null,
-                longitude: data.location?.lon ? parseFloat(data.location.lon) : null,
+                latitude: (data.location?.lat != null && data.location.lat !== "") ? parseFloat(data.location.lat) : null,
+                longitude: (data.location?.lon != null && data.location.lon !== "") ? parseFloat(data.location.lon) : null,
                 timezone: data.timeZone,
                 org: data.asn?.name,
             };
@@ -153,17 +156,69 @@ function getLocalNodeIP() {
 }
 
 /**
+ * Resolves a raw client information object into concrete latitude, longitude, and ISO country code.
+ * Optimized path:
+ * 1. Direct valid coordinates -> Immediate return
+ * 2. Country code present with NO region -> Fast direct lookup via getCountryLocation
+ * 3. Region present -> Attempt cloud region match, fallback to getCountryLocation
+ *
+ * @param {Object|string} info - Client telemetry or location metadata
+ * @returns {{latitude: number, longitude: number, countryCode: string, continent: string}|null} Resolved location object
+ */
+export function resolveInfo(info) {
+    if (!info) return null;
+    if (typeof info !== 'object') return null;
+
+    const { latitude, longitude, countryCode, region } = info;
+    
+    // Fetch location data; use fallback empty object in case of undefined return
+    const countryLocation = getCountryLocation(countryCode) || {};
+
+    // 1. Direct path: Valid numeric coordinates present
+    if (latitude !== null && longitude !== null) {
+        return { 
+            latitude, 
+            longitude, 
+            country: countryCode, 
+            continent: countryLocation.continent 
+        };
+    }
+
+    // Early exit: If region does not exist.
+    if (!region) {
+        return countryLocation;
+    }
+
+    // 3. Region String Match Path: If region string is present, test against cloudProviders registry
+    const cleanRegion = String(region).trim().toLowerCase();
+    const match = cloudProviders.find(cloudName =>
+        cloudName.name.toLowerCase().includes(cleanRegion)
+    );
+
+    if (match) {
+        return {
+            latitude: match.lat,
+            longitude: match.lng,
+            country: match.country,
+            continent: countryLocation.continent 
+        };
+    }
+
+    return countryLocation;
+}
+
+/**
  * Formats data into a normalized client information payload.
  */
 function normalizeInfoPayload(rawData = {}, sourceProvider = "unknown", isPartial = false, isLocal = false) {
-    return {
+    const payload = {
         ip: rawData.ip || LOCAL_FALLBACK_IP,
         city: rawData.city || null,
         region: rawData.region || null,
         country: rawData.country || null,
         countryCode: rawData.countryCode || null,
-        latitude: typeof rawData.latitude === "number" ? rawData.latitude : null,
-        longitude: typeof rawData.longitude === "number" ? rawData.longitude : null,
+        latitude: typeof rawData.latitude === "number" && !isNaN(rawData.latitude) ? rawData.latitude : null,
+        longitude: typeof rawData.longitude === "number" && !isNaN(rawData.longitude) ? rawData.longitude : null,
         timezone: rawData.timezone || null,
         org: rawData.org || null,
         source: sourceProvider,
@@ -171,6 +226,24 @@ function normalizeInfoPayload(rawData = {}, sourceProvider = "unknown", isPartia
         isLocal,
         timestamp: Date.now()
     };
+
+    // Enhance and normalize the payload using the external fallback maps
+    const resolved = resolveInfo(payload);
+    
+    if (resolved) {
+        payload.latitude = resolved.latitude ?? payload.latitude;
+        payload.longitude = resolved.longitude ?? payload.longitude;
+        payload.continent = resolved.continent || null;
+        
+        // Map the country fallback (which usually returns an ISO code)
+        if (resolved.country) {
+            payload.countryCode = resolved.country;
+        }
+    } else {
+        payload.continent = null;
+    }
+
+    return payload;
 }
 
 /**
@@ -276,5 +349,4 @@ if (isBrowser) {
     });
 }
 
-// Export single unified function
 export default getClientInfo;

@@ -16,6 +16,7 @@
  *
  ********************************************************************************/
 
+export { cloudProviders } from "./cloudProviders.js";
 export { getClientInfo } from "./getClientInfo.js";
 export { getRelativePath } from "./getRelativePath.js";
 export { getClockOffset } from "./getClockOffset.js";
@@ -39,6 +40,7 @@ export { getAttributes, getAttributeNames, setAttributeNames } from "./attribute
 export { clickedElement } from "./clickedElement.js";
 export { astSync, astAsync } from "./ast/index.js";
 
+import { cloudProviders } from "./cloudProviders.js";
 import { getClientInfo } from "./getClientInfo.js";
 import { getRelativePath } from "./getRelativePath.js";
 import { getClockOffset } from "./getClockOffset.js";
@@ -63,6 +65,7 @@ import { clickedElement } from "./clickedElement.js";
 import { astSync, astAsync } from "./ast/index.js";
 
 const utils = {
+    cloudProviders,
     getClientInfo,
     getRelativePath,
 	getClockOffset,
