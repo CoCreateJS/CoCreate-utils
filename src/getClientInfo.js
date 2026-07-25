@@ -158,16 +158,15 @@ function getLocalNodeIP() {
 /**
  * Resolves a raw client information object into concrete latitude, longitude, and ISO country code.
  * Optimized path:
- * 1. Direct valid coordinates -> Immediate return
- * 2. Country code present with NO region -> Fast direct lookup via getCountryLocation
- * 3. Region present -> Attempt cloud region match, fallback to getCountryLocation
+ * 1. Direct valid coordinates -> Immediate return with continent added
+ * 2. Missing coordinates but region present -> Attempt cloud region match for lat/lon
+ * 3. Fallback -> Return getCountryLocation coordinates
  *
  * @param {Object|string} info - Client telemetry or location metadata
  * @returns {{latitude: number, longitude: number, countryCode: string, continent: string}|null} Resolved location object
  */
 export function resolveInfo(info) {
-    if (!info) return null;
-    if (typeof info !== 'object') return null;
+    if (!info || typeof info !== 'object') return null;
 
     const { latitude, longitude, countryCode, region } = info;
     
@@ -175,36 +174,43 @@ export function resolveInfo(info) {
     const countryLocation = getCountryLocation(countryCode) || {};
 
     // 1. Direct path: Valid numeric coordinates present
-    if (latitude !== null && longitude !== null) {
+    if (latitude !== null && longitude !== null && latitude !== undefined && longitude !== undefined) {
         return { 
             latitude, 
             longitude, 
-            country: countryCode, 
-            continent: countryLocation.continent 
+            countryCode, 
+            continent: countryLocation.continent || null
         };
     }
 
-    // Early exit: If region does not exist.
-    if (!region) {
-        return countryLocation;
+    // 2. Region String Match Path: Try cloudProviders if coordinates are missing
+    if (region) {
+        const cleanRegion = String(region).trim().toLowerCase();
+        const match = cloudProviders.find(cloud =>
+            cloud.name && cloud.name.toLowerCase().includes(cleanRegion)
+        );
+
+        if (match) {
+            // If the cloud provider match has a specific country, update the continent reference
+            const matchCountryCode = match.country || countryCode;
+            const matchLocation = match.country ? (getCountryLocation(match.country) || {}) : countryLocation;
+            
+            return {
+                latitude: match.lat ?? match.latitude ?? null,
+                longitude: match.lng ?? match.longitude ?? null,
+                countryCode: matchCountryCode,
+                continent: matchLocation.continent || countryLocation.continent || null 
+            };
+        }
     }
 
-    // 3. Region String Match Path: If region string is present, test against cloudProviders registry
-    const cleanRegion = String(region).trim().toLowerCase();
-    const match = cloudProviders.find(cloudName =>
-        cloudName.name.toLowerCase().includes(cleanRegion)
-    );
-
-    if (match) {
-        return {
-            latitude: match.lat,
-            longitude: match.lng,
-            country: match.country,
-            continent: countryLocation.continent 
-        };
-    }
-
-    return countryLocation;
+    // 3. Ultimate Fallback: Use getCountryLocation coordinates
+    return {
+        latitude: countryLocation.latitude ?? countryLocation.lat ?? null,
+        longitude: countryLocation.longitude ?? countryLocation.lng ?? null,
+        countryCode: countryLocation.countryCode ?? countryLocation.country ?? countryCode,
+        continent: countryLocation.continent || null
+    };
 }
 
 /**
@@ -235,9 +241,8 @@ function normalizeInfoPayload(rawData = {}, sourceProvider = "unknown", isPartia
         payload.longitude = resolved.longitude ?? payload.longitude;
         payload.continent = resolved.continent || null;
         
-        // Map the country fallback (which usually returns an ISO code)
-        if (resolved.country) {
-            payload.countryCode = resolved.country;
+        if (resolved.countryCode) {
+            payload.countryCode = resolved.countryCode;
         }
     } else {
         payload.continent = null;
