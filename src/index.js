@@ -39,6 +39,7 @@ export { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./
 export { getAttributes, getAttributeNames, setAttributeNames } from "./attributes.js";
 export { clickedElement } from "./clickedElement.js";
 export { astSync, astAsync } from "./ast/index.js";
+export { processOperators, processOperatorsAsync } from "./ast/operators.js";
 
 import { cloudProviders } from "./cloudProviders.js";
 import { getClientInfo } from "./getClientInfo.js";
@@ -63,6 +64,8 @@ import { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./
 import { getAttributes, getAttributeNames, setAttributeNames } from "./attributes.js";
 import { clickedElement } from "./clickedElement.js";
 import { astSync, astAsync } from "./ast/index.js";
+import { processOperators, processOperatorsAsync } from "./ast/operators.js";
+
 
 const utils = {
     cloudProviders,
@@ -96,7 +99,9 @@ const utils = {
     getAttributeNames,
     clickedElement,
     astSync,
-    astAsync
+    astAsync,
+    processOperators,
+    processOperatorsAsync
 };
 
 export default utils;
