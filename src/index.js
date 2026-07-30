@@ -40,6 +40,7 @@ export { getAttributes, getAttributeNames, setAttributeNames } from "./attribute
 export { clickedElement } from "./clickedElement.js";
 export { astSync, astAsync } from "./ast/index.js";
 export { processOperators, processOperatorsAsync } from "./ast/operators.js";
+export { HTMLScanner } from "./html-scanner.js";
 
 import { cloudProviders } from "./cloudProviders.js";
 import { getClientInfo } from "./getClientInfo.js";
@@ -65,6 +66,7 @@ import { getAttributes, getAttributeNames, setAttributeNames } from "./attribute
 import { clickedElement } from "./clickedElement.js";
 import { astSync, astAsync } from "./ast/index.js";
 import { processOperators, processOperatorsAsync } from "./ast/operators.js";
+import { HTMLScanner } from "./html-scanner.js";
 
 
 const utils = {
@@ -101,7 +103,8 @@ const utils = {
     astSync,
     astAsync,
     processOperators,
-    processOperatorsAsync
+    processOperatorsAsync,
+    HTMLScanner
 };
 
 export default utils;
