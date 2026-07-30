@@ -41,6 +41,7 @@ export { clickedElement } from "./clickedElement.js";
 export { astSync, astAsync } from "./ast/index.js";
 export { processOperators, processOperatorsAsync } from "./ast/operators.js";
 export { HTMLScanner } from "./html-scanner.js";
+export { generateJWT, verifySignature, buildAuthHeaders, generateKeyPair, signVapid } from './security.js';
 
 import { cloudProviders } from "./cloudProviders.js";
 import { getClientInfo } from "./getClientInfo.js";
@@ -67,7 +68,7 @@ import { clickedElement } from "./clickedElement.js";
 import { astSync, astAsync } from "./ast/index.js";
 import { processOperators, processOperatorsAsync } from "./ast/operators.js";
 import { HTMLScanner } from "./html-scanner.js";
-
+import { generateJWT, verifySignature, buildAuthHeaders, generateKeyPair, signVapid } from './security.js';
 
 const utils = {
     cloudProviders,
@@ -104,7 +105,12 @@ const utils = {
     astAsync,
     processOperators,
     processOperatorsAsync,
-    HTMLScanner
+    HTMLScanner,
+    generateJWT, 
+    verifySignature, 
+    buildAuthHeaders,
+    generateKeyPair, 
+    signVapid
 };
 
 export default utils;
