@@ -48,6 +48,6 @@
     "./server": "./src/server.js"
   },
   "devDependencies": {
-    "@cocreate/webpack": "^1.7.0"
+    "@cocreate/webpack": "^1.8.0"
   }
 }
