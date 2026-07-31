@@ -17,13 +17,15 @@ export function maskComments(html) {
 /**
  * Parses raw HTML attribute string into a key-value map.
  * Handles double quotes, single quotes, unquoted values, and boolean attributes.
+ * Distinguishes full attribute keys with hyphens (e.g., state-src vs src).
  * @param {string} attrString - Opening tag attributes string
  * @returns {Record<string, string>} Map of attribute names to string values
  */
 export function parseAttributes(attrString) {
   if (!attrString) return {};
   const attrs = {};
-  const regex = /([a-zA-Z0-9:-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+  // Match full attribute names including hyphens, underscores, colons, dots, and @
+  const regex = /([a-zA-Z0-9_.:@-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
   let match;
 
   while ((match = regex.exec(attrString)) !== null) {
@@ -245,13 +247,18 @@ export class HTMLScanner {
       if (Object.keys(handle.attributeMutations).length > 0) {
         for (const [attr, val] of Object.entries(handle.attributeMutations)) {
           if (val === null) {
-            const removeRegex = new RegExp(`\\s+${attr}(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'>]+))?`, "gi");
+            // Remove attribute using exact whitespace boundaries (preventing prefix matching)
+            const removeRegex = new RegExp(`(?:^|\\s+)${attr}(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'>]+))?`, "gi");
             openTag = openTag.replace(removeRegex, "");
           } else {
             const strVal = String(val).replace(/"/g, "&quot;");
-            const attrRegex = new RegExp(`\\b(${attr})\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'>]+)`, "i");
+            // Match exact attribute name using strict whitespace/tag boundaries
+            const attrRegex = new RegExp(`(?:^|\\s+)(${attr})\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'>]+)`, "i");
             if (attrRegex.test(openTag)) {
-              openTag = openTag.replace(attrRegex, `${attr}="${strVal}"`);
+              openTag = openTag.replace(attrRegex, (match, p1) => {
+                const leadSpace = match.startsWith(" ") || match.startsWith("\t") || match.startsWith("\n") ? match[0] : " ";
+                return `${leadSpace}${p1}="${strVal}"`;
+              });
             } else {
               const closingAngle = openTag.lastIndexOf(">");
               if (openTag.endsWith("/>")) {
