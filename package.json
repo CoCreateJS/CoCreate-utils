@@ -35,7 +35,8 @@
     "url": "https://github.com/sponsors/CoCreate-app"
   },
   "type": "module",
-  "main": "./src/index.js",
+  "main": "./src/server.js",
+  "browser": "./src/browser.js",
   "devDependencies": {
     "@cocreate/webpack": "^1.7.0",
     "css-loader": "^5.1.3",
