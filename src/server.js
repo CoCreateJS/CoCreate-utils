@@ -37,8 +37,8 @@ export { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./
 export { astSync, astAsync } from "./modules/ast/index.js";
 export { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 export { HTMLScanner } from "./modules/html-scanner.js";
-export { generateJWT, verifySignature, buildAuthHeaders, generateKeyPair, signVapid } from './modules/security.js';
 export { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
+export { Security } from './modules/security.js';
 
 import { cloudProviders } from "./modules/cloudProviders.js";
 import { getClientInfo } from "./modules/getClientInfo.js";
@@ -61,8 +61,9 @@ import { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./
 import { astSync, astAsync } from "./modules/ast/index.js";
 import { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 import { HTMLScanner } from "./modules/html-scanner.js";
-import { generateJWT, verifySignature, buildAuthHeaders, generateKeyPair, signVapid } from './modules/security.js';
 import { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
+import Security from './modules/security.js';
+
 
 const utils = {
     cloudProviders,
@@ -93,11 +94,7 @@ const utils = {
     processOperators,
     processOperatorsAsync,
     HTMLScanner,
-    generateJWT, 
-    verifySignature, 
-    buildAuthHeaders,
-    generateKeyPair, 
-    signVapid,
+    Security,
     getAttributes,
     getAttributeNames,
     setAttributeNames

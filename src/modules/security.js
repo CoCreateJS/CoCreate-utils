@@ -1,5 +1,5 @@
 /********************************************************************************
- * Copyright (C) 2023 CoCreate and Contributors.
+ * Copyright (C) 2023-2026 CoCreate and Contributors.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -13,155 +13,351 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
- *
  ********************************************************************************/
 
-// Commercial Licensing Information:
-// For commercial use of this software without the copyleft provisions of the AGPLv3,
-// you must obtain a commercial license from CoCreate LLC.
-// For details, visit <https://cocreate.app/licenses/> or contact us at sales@cocreate.app.
-
 import crypto from 'node:crypto';
-import { astAsync } from '@cocreate/utils';
-
-export const Security = {
-    generateKeyPair,
-    generateJWT,
-    verifySignature,
-    signVapid,
-    buildAuthHeaders
-};
 
 /**
- * Generates cryptographic key pairs (e.g. EC prime256v1 for VAPID/ES256, RSA, HMAC)
- * using Node's native crypto module without third-party libraries like web-push.
+ * Universal Security Engine
+ *
+ * Provides atomic, single-purpose cryptographic and encoding primitives
+ * designed to be dynamically composed by an Abstract System / ASC engine.
+ * Avoids monolithic "magic" header functions in favor of modular operations.
  */
-export function generateKeyPair(type = 'vapid', options = {}) {
-    if (type === 'vapid' || type === 'ec') {
-        const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
-            namedCurve: options.curve || 'prime256v1',
-            publicKeyEncoding: { type: 'spki', format: 'der' },
-            privateKeyEncoding: { type: 'pkcs8', format: 'der' }
-        });
-        
-        // Formats raw base64url keys suitable for VAPID web push standards
-        const rawPublicKey = publicKey.subarray(publicKey.length - 65).toString('base64url');
-        const rawPrivateKey = privateKey.subarray(privateKey.length - 32).toString('base64url');
-        
-        return { publicKey: rawPublicKey, privateKey: rawPrivateKey };
-    }
-    
-    return { secret: crypto.randomBytes(options.length || 32).toString('hex') };
-}
+export class Security {
 
-/**
- * Universal AST JWT Generator: Supports HS256 (HMAC) and ES256 (ECDSA/VAPID).
- */
-export function generateJWT(config = {}, secretOrPrivateKey, algorithm = 'HS256') {
-    try {
-        const header = config.header || { alg: algorithm, typ: 'JWT' };
-        const payload = config.payload || {};
-        
-        const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
-        const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
-        const signatureInput = `${encodedHeader}.${encodedPayload}`;
-        
-        let signature;
-        if (algorithm === 'HS256') {
-            const hmac = crypto.createHmac('sha256', secretOrPrivateKey);
-            hmac.update(signatureInput);
-            signature = hmac.digest('base64url');
-        } else if (algorithm === 'ES256') {
-            const sign = crypto.createSign('SHA256');
-            sign.update(signatureInput);
-            sign.end();
-            signature = sign.sign({ key: secretOrPrivateKey, dsaEncoding: 'ieee-p1363' }, 'base64url');
-        } else {
-            throw new Error(`Unsupported JWT algorithm: ${algorithm}`);
-        }
-        
-        return `${signatureInput}.${signature}`;
-    } catch (err) {
-        console.error('[@cocreate/security] Failed to generate JWT:', err);
-        throw err;
-    }
-}
+    /**
+     * Constant-time comparison between two string or Buffer values.
+     * Guards against timing side-channel attacks during verification.
+     *
+     * @param {string|Buffer} a - First comparison value
+     * @param {string|Buffer} b - Second comparison value
+     * @returns {boolean} True if values match identically
+     */
+    static timingSafeEqual(a, b) {
+        if (typeof a !== typeof b) return false;
 
-/**
- * Universal signature verification method (HMAC SHA256, Webhooks, API Payloads).
- */
-export function verifySignature(payload, signature, secret, algorithm = 'sha256') {
-    try {
-        if (!payload || !signature || !secret) return false;
+        const bufA = Buffer.isBuffer(a) ? a : Buffer.from(String(a));
+        const bufB = Buffer.isBuffer(b) ? b : Buffer.from(String(b));
 
-        const hmac = crypto.createHmac(algorithm, secret);
-        hmac.update(payload);
-        
-        const expectedSignature = hmac.digest();
-        let receivedSignature = Buffer.isBuffer(signature) ? signature : Buffer.from(signature, 'hex');
-
-        if (receivedSignature.length !== expectedSignature.length) {
-            receivedSignature = Buffer.from(signature, 'base64');
-        }
-
-        if (receivedSignature.length !== expectedSignature.length) {
-            console.warn('[@cocreate/security] Signature verification rejected due to length mismatch.');
+        if (bufA.length !== bufB.length) {
+            crypto.timingSafeEqual(bufA, bufA);
             return false;
         }
-        
-        return crypto.timingSafeEqual(expectedSignature, receivedSignature);
-    } catch (err) {
-        console.error('[@cocreate/security] Failed signature verification:', err.message);
-        return false;
-    }
-}
 
-/**
- * Creates AST-native Web Push VAPID authentication headers without web-push.
- */
-export function signVapid(endpoint, vapidDetails) {
-    const url = new URL(endpoint);
-    const audience = `${url.protocol}//${url.host}`;
-    const exp = Math.floor(Date.now() / 1000) + (12 * 60 * 60); // 12-hour expiration window
-    
-    const jwt = generateJWT({
-        header: { alg: 'ES256', typ: 'JWT' },
-        payload: {
-            aud: audience,
-            exp,
-            sub: vapidDetails.subject || 'mailto:contact@cocreate.app'
+        return crypto.timingSafeEqual(bufA, bufB);
+    }
+
+    /**
+     * Encodes input into Base64URL format.
+     */
+    static base64urlEncode(input) {
+        const str = (typeof input === 'object' && !Buffer.isBuffer(input)) 
+            ? JSON.stringify(input) 
+            : String(input);
+        return Buffer.from(str).toString('base64url');
+    }
+
+    /**
+     * Decodes Base64URL string back into UTF-8 string or parsed JSON.
+     */
+    static base64urlDecode(str, parseJson = true) {
+        try {
+            const decoded = Buffer.from(str, 'base64url').toString('utf8');
+            return parseJson ? JSON.parse(decoded) : decoded;
+        } catch {
+            return null;
         }
-    }, vapidDetails.privateKey, 'ES256');
+    }
 
-    return {
-        headers: {
-            'Authorization': `vapid t=${jwt}, k=${vapidDetails.publicKey}`,
-            'Crypto-Key': `p256ecdsa=${vapidDetails.publicKey}`
-        },
-        jwt
-    };
+    /**
+     * Encodes input into standard Base64 format.
+     */
+    static base64Encode(input) {
+        const str = (typeof input === 'object' && !Buffer.isBuffer(input)) 
+            ? JSON.stringify(input) 
+            : String(input);
+        return Buffer.from(str).toString('base64');
+    }
+
+    /**
+     * Encodes input into Hexadecimal format.
+     */
+    static hexEncode(input) {
+        const str = (typeof input === 'object' && !Buffer.isBuffer(input)) 
+            ? JSON.stringify(input) 
+            : String(input);
+        return Buffer.from(str).toString('hex');
+    }
+
+    /**
+     * Generates a cryptographic hash digest (SHA-256, SHA-512, MD5, etc.).
+     *
+     * @param {string|Buffer|Object} payload - Data to hash
+     * @param {string} [algorithm='sha256'] - Hashing algorithm
+     * @param {string} [digest='hex'] - Output format ('hex', 'base64', 'base64url')
+     * @returns {string} Calculated digest string
+     */
+    static hash(payload, algorithm = 'sha256', digest = 'hex') {
+        const data = (typeof payload === 'object' && !Buffer.isBuffer(payload))
+            ? JSON.stringify(payload)
+            : String(payload);
+        return crypto.createHash(algorithm).update(data).digest(digest);
+    }
+
+    /**
+     * Generates an HMAC signature using a shared secret.
+     *
+     * @param {string|Buffer|Object} payload - Data to sign
+     * @param {string|Buffer} secret - Shared secret key
+     * @param {string} [algorithm='sha256'] - HMAC algorithm
+     * @param {string} [digest='hex'] - Output digest format
+     * @returns {string} Calculated HMAC string
+     */
+    static signHmac(payload, secret, algorithm = 'sha256', digest = 'hex') {
+        const data = (typeof payload === 'object' && !Buffer.isBuffer(payload))
+            ? JSON.stringify(payload)
+            : String(payload);
+        return crypto.createHmac(algorithm, secret).update(data).digest(digest);
+    }
+
+    /**
+     * Dynamically generates RSA, EC, Ed25519, or X25519 key pairs.
+     */
+    static generateKeyPair(type = 'rsa', options = {}) {
+        const algoType = type.toLowerCase();
+
+        switch (algoType) {
+            case 'rsa': {
+                const { modulusLength = 2048 } = options;
+                return crypto.generateKeyPairSync('rsa', {
+                    modulusLength,
+                    publicKeyEncoding: { type: 'spki', format: 'pem' },
+                    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+                });
+            }
+            case 'ec': {
+                const { namedCurve = 'prime256v1' } = options;
+                return crypto.generateKeyPairSync('ec', {
+                    namedCurve,
+                    publicKeyEncoding: { type: 'spki', format: 'pem' },
+                    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+                });
+            }
+            case 'ed25519':
+            case 'x25519': {
+                return crypto.generateKeyPairSync(algoType, {
+                    publicKeyEncoding: { type: 'spki', format: 'pem' },
+                    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+                });
+            }
+            default:
+                throw new Error(`[SECURITY] Unsupported key pair algorithm: ${type}`);
+        }
+    }
+
+    /**
+     * Constructs API keys with custom service prefixes and entropy lengths.
+     */
+    static generateApiKey(options = {}) {
+        const { prefix = 'sk_', byteLength = 32, encoding = 'base64url' } = options;
+        
+        const rawBytes = crypto.randomBytes(byteLength);
+        const secret = rawBytes.toString(encoding);
+        const apiKey = `${prefix}${secret}`;
+        const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex');
+
+        return { apiKey, secret, hashedKey };
+    }
+
+    /**
+     * Validates an incoming API key against a stored SHA-256 hash in constant time.
+     */
+    static verifyApiKey(incomingApiKey, storedHashedKey) {
+        if (!incomingApiKey || !storedHashedKey) return false;
+        const computedHash = crypto.createHash('sha256').update(incomingApiKey).digest('hex');
+        return this.timingSafeEqual(computedHash, storedHashedKey);
+    }
+
+    /**
+     * Generates a signed JWT with standard or asymmetric algorithms (RS256, HS256, ES256, EdDSA).
+     */
+    static generateJWT(tokenEnvelope, secretOrPrivateKey, algorithm = 'RS256') {
+        const { header = {}, payload = {} } = tokenEnvelope;
+
+        const jwtHeader = { alg: algorithm, typ: 'JWT', ...header };
+        const encodedHeader = this.base64urlEncode(jwtHeader);
+        const encodedPayload = this.base64urlEncode(payload);
+        const signatureInput = `${encodedHeader}.${encodedPayload}`;
+
+        let signature = '';
+
+        if (algorithm.startsWith('HS')) {
+            const hashAlg = algorithm === 'HS512' ? 'sha512' : 'sha256';
+            signature = crypto
+                .createHmac(hashAlg, secretOrPrivateKey)
+                .update(signatureInput)
+                .digest('base64url');
+        } else {
+            const hashAlg = algorithm.startsWith('ES') ? 'sha256' : (algorithm === 'RS512' ? 'sha512' : 'sha256');
+            const signer = crypto.createSign(hashAlg);
+            signer.update(signatureInput);
+            signer.end();
+            signature = signer.sign(secretOrPrivateKey, 'base64url');
+        }
+
+        return `${signatureInput}.${signature}`;
+    }
+
+    /**
+     * Verifies and decodes a JWT token.
+     */
+    static verifyJWT(token, secretOrPublicKey, algorithm = 'RS256') {
+        try {
+            const parts = token.split('.');
+            if (parts.length !== 3) return null;
+
+            const [headerB64, payloadB64, signatureB64] = parts;
+            const signatureInput = `${headerB64}.${payloadB64}`;
+
+            let isValid = false;
+
+            if (algorithm.startsWith('HS')) {
+                const hashAlg = algorithm === 'HS512' ? 'sha512' : 'sha256';
+                const expectedSignature = crypto
+                    .createHmac(hashAlg, secretOrPublicKey)
+                    .update(signatureInput)
+                    .digest('base64url');
+                isValid = this.timingSafeEqual(signatureB64, expectedSignature);
+            } else {
+                const hashAlg = algorithm.startsWith('ES') ? 'sha256' : (algorithm === 'RS512' ? 'sha512' : 'sha256');
+                const verifier = crypto.createVerify(hashAlg);
+                verifier.update(signatureInput);
+                verifier.end();
+                isValid = verifier.verify(secretOrPublicKey, signatureB64, 'base64url');
+            }
+
+            if (!isValid) return null;
+
+            const payload = this.base64urlDecode(payloadB64);
+            if (payload && payload.exp && (payload.exp * 1000) < Date.now()) {
+                return null;
+            }
+
+            return payload;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * AES-256-GCM Authenticated Symmetric Encryption.
+     */
+    static encrypt(data, secretKey) {
+        const key = Buffer.isBuffer(secretKey) && secretKey.length === 32 
+            ? secretKey 
+            : crypto.createHash('sha256').update(String(secretKey)).digest();
+
+        const iv = crypto.randomBytes(12);
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+        const plaintext = (typeof data === 'object') ? JSON.stringify(data) : String(data);
+        let ciphertext = cipher.update(plaintext, 'utf8', 'base64url');
+        ciphertext += cipher.final('base64url');
+
+        const tag = cipher.getAuthTag().toString('base64url');
+
+        return { ciphertext, iv: iv.toString('base64url'), tag, alg: 'aes-256-gcm' };
+    }
+
+    /**
+     * AES-256-GCM Authenticated Symmetric Decryption.
+     */
+    static decrypt(envelope, secretKey, parseJson = true) {
+        try {
+            const { ciphertext, iv, tag } = envelope;
+            const key = Buffer.isBuffer(secretKey) && secretKey.length === 32 
+                ? secretKey 
+                : crypto.createHash('sha256').update(String(secretKey)).digest();
+
+            const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64url'));
+            decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+
+            let plaintext = decipher.update(ciphertext, 'base64url', 'utf8');
+            plaintext += decipher.final('utf8');
+
+            return parseJson ? JSON.parse(plaintext) : plaintext;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Dynamic Transformation Pipeline (ASC Executor Integration)
+     * Executes a chain of atomic security operations sequentially.
+     * Allows the ASC engine to dynamically construct complex tokens without magic code.
+     *
+     * Example Pipeline Steps:
+     * [
+     *   { op: 'timestamp', format: 'seconds' },
+     *   { op: 'concat', prefix: 'POST\n/api/v1\n' },
+     *   { op: 'signHmac', secret: 'my-secret', algorithm: 'sha256', digest: 'base64' },
+     *   { op: 'format', prefix: 'Bearer ' }
+     * ]
+     *
+     * @param {any} initialValue - Base input string, object, or buffer
+     * @param {Array<Object>} pipelineSteps - Ordered list of dynamic operations
+     * @returns {string|Buffer|Object} Final transformed token/header value
+     */
+    static transform(initialValue, pipelineSteps = []) {
+        return pipelineSteps.reduce((acc, step) => {
+            const { op, ...opts } = step;
+
+            switch (op) {
+                case 'timestamp':
+                    return opts.format === 'seconds' 
+                        ? Math.floor(Date.now() / 1000) 
+                        : Date.now();
+
+                case 'hash':
+                    return this.hash(acc, opts.algorithm || 'sha256', opts.digest || 'hex');
+
+                case 'signHmac':
+                    return this.signHmac(acc, opts.secret, opts.algorithm || 'sha256', opts.digest || 'hex');
+
+                case 'base64Encode':
+                    return this.base64Encode(acc);
+
+                case 'base64urlEncode':
+                    return this.base64urlEncode(acc);
+
+                case 'hexEncode':
+                    return this.hexEncode(acc);
+
+                case 'encrypt':
+                    return this.encrypt(acc, opts.secretKey);
+
+                case 'generateJWT':
+                    return this.generateJWT(acc, opts.secretOrPrivateKey, opts.algorithm || 'RS256');
+
+                case 'concat':
+                    return `${opts.prefix || ''}${acc}${opts.suffix || ''}`;
+
+                case 'format':
+                    return `${opts.prefix || ''}${acc}${opts.suffix || ''}`;
+
+                case 'jsonStringify':
+                    return JSON.stringify(acc);
+
+                default:
+                    if (typeof this[op] === 'function') {
+                        return this[op](acc, opts);
+                    }
+                    return acc;
+            }
+        }, initialValue);
+    }
 }
 
-/**
- * Dynamically resolves authentication headers and signing profiles using AST context.
- */
-export async function buildAuthHeaders(authConfig, sandboxContext) {
-    if (!authConfig) return {};
-    
-    const resolvedAuth = await astAsync({ executeAST: authConfig, sandbox: sandboxContext });
-    
-    if (resolvedAuth.type === 'bearer') {
-        return { 'Authorization': `Bearer ${resolvedAuth.token}` };
-    }
-    if (resolvedAuth.type === 'vapid') {
-        return signVapid(resolvedAuth.endpoint, resolvedAuth.vapidDetails).headers;
-    }
-    if (resolvedAuth.type === 'jwt') {
-        const token = generateJWT(resolvedAuth.config, resolvedAuth.secret, resolvedAuth.alg || 'HS256');
-        return { 'Authorization': `Bearer ${token}` };
-    }
-    
-    return resolvedAuth;
-}
-
+// Default export manifest
 export default Security;
