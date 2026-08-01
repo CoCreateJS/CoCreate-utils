@@ -38,6 +38,7 @@ export { astSync, astAsync } from "./modules/ast/index.js";
 export { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 export { HTMLScanner } from "./modules/html-scanner.js";
 export { generateJWT, verifySignature, buildAuthHeaders, generateKeyPair, signVapid } from './modules/security.js';
+export { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
 
 import { cloudProviders } from "./modules/cloudProviders.js";
 import { getClientInfo } from "./modules/getClientInfo.js";
@@ -61,6 +62,7 @@ import { astSync, astAsync } from "./modules/ast/index.js";
 import { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 import { HTMLScanner } from "./modules/html-scanner.js";
 import { generateJWT, verifySignature, buildAuthHeaders, generateKeyPair, signVapid } from './modules/security.js';
+import { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
 
 const utils = {
     cloudProviders,
@@ -95,7 +97,10 @@ const utils = {
     verifySignature, 
     buildAuthHeaders,
     generateKeyPair, 
-    signVapid
+    signVapid,
+    getAttributes,
+    getAttributeNames,
+    setAttributeNames
 };
 
 export default utils;

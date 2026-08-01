@@ -47,6 +47,7 @@
     "./browser": "./src/browser.js",
     "./server": "./src/server.js"
   },
+  "sideEffects": false,
   "devDependencies": {
     "@cocreate/webpack": "^1.8.0"
   }
