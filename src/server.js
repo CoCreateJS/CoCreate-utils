@@ -38,7 +38,7 @@ export { astSync, astAsync } from "./modules/ast/index.js";
 export { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 export { HTMLScanner } from "./modules/html-scanner.js";
 export { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
-export { Security } from './modules/security.js';
+export { security } from './modules/security.js';
 
 import { cloudProviders } from "./modules/cloudProviders.js";
 import { getClientInfo } from "./modules/getClientInfo.js";
@@ -62,7 +62,7 @@ import { astSync, astAsync } from "./modules/ast/index.js";
 import { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 import { HTMLScanner } from "./modules/html-scanner.js";
 import { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
-import Security from './modules/security.js';
+import security from './modules/security.js';
 
 
 const utils = {
@@ -94,7 +94,7 @@ const utils = {
     processOperators,
     processOperatorsAsync,
     HTMLScanner,
-    Security,
+    security,
     getAttributes,
     getAttributeNames,
     setAttributeNames
