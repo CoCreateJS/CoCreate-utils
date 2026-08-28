@@ -1,5 +1,6 @@
 import { getValueFromObject } from "../getValueFromObject.js";
 import { queryElements } from "../queryElements.js";
+import { queryData } from "../dataQuery.js";
 import { 
     processOperators, 
     processOperatorsAsync, 
@@ -134,16 +135,285 @@ const BrowserGlobals = {
 const isBrowser = typeof window !== 'undefined';
 let baseSandboxScope = isBrowser ? Object.setPrototypeOf(BrowserGlobals, isomorphicSandbox) : isomorphicSandbox;
 
+const conditionalOperators = new Set([
+    "$eq",
+    "$ne",
+    "$not",
+    "$lt",
+    "$lte",
+    "$gt",
+    "$gte",
+    "$in",
+    "$nin",
+    "$all",
+    "$elemMatch",
+    "$size",
+    "$exists",
+    "$regex",
+    "$type",
+    "$mod"
+]);
+
+function resolveScopedPath(expression, registry, sandbox, bindFunction = false) {
+    if (typeof expression !== "string" || !/^\$[\w$-]+(?:\.[\w$-]+|\[\d+\])*$/.test(expression)) {
+        return { found: false, value: undefined };
+    }
+
+    const path = expression.slice(1).replace(/\[(\d+)\]/g, ".$1").split(".");
+    const root = path.shift();
+    const prefixedRoot = `$${root}`;
+    let value;
+
+    if (registry?.has(prefixedRoot)) {
+        value = registry.get(prefixedRoot);
+    } else if (registry?.has(root)) {
+        value = registry.get(root);
+    } else if (sandbox && (prefixedRoot in sandbox || root in sandbox)) {
+        value = prefixedRoot in sandbox ? sandbox[prefixedRoot] : sandbox[root];
+    } else {
+        return { found: false, value: undefined };
+    }
+
+    let owner = null;
+    for (const property of path) {
+        if (value === null || value === undefined || !(property in Object(value))) {
+            return { found: false, value: undefined };
+        }
+        owner = value;
+        value = value[property];
+    }
+
+    if (bindFunction && owner && typeof value === "function") {
+        value = value.bind(owner);
+    }
+
+    return { found: true, value };
+}
+
+function getForDefinition(definition) {
+    let shouldAwait = false;
+    const modifierEntries = Object.entries(definition || {});
+    if (modifierEntries.length === 1 && modifierEntries[0][0] === "$await") {
+        shouldAwait = true;
+        definition = modifierEntries[0][1];
+    }
+
+    const sourceEntries = Object.entries(definition || {});
+    if (sourceEntries.length !== 1) {
+        throw new Error("AST '$for' requires exactly one iterable source.");
+    }
+
+    const [source, scope] = sourceEntries[0];
+    if (!source.startsWith("$")) {
+        throw new Error(`AST '$for' source '${source}' must be a scoped value.`);
+    }
+
+    const scopeEntries = Object.entries(scope || {});
+    if (scopeEntries.length !== 1) {
+        throw new Error("AST '$for' requires exactly one scoped variable and iteration body.");
+    }
+
+    const [variable, body] = scopeEntries[0];
+    if (!/^[A-Za-z_][\w$]*$/.test(variable)) {
+        throw new Error(`AST '$for' has an invalid scoped variable '${variable}'.`);
+    }
+
+    return { source, variable, body, shouldAwait };
+}
+
+function createIterationScope({ sandbox, registry, variable, value }) {
+    const iterationSandbox = sandbox instanceof Map
+        ? undefined
+        : Object.create(sandbox || null);
+
+    if (iterationSandbox) {
+        iterationSandbox[variable] = value;
+    }
+
+    const iterationRegistry = new Map(registry);
+    iterationRegistry.set(variable, value);
+    iterationRegistry.set(`$${variable}`, value);
+
+    return { iterationSandbox, iterationRegistry };
+}
+
+function createNestedScope(sandbox, registry) {
+    return {
+        nestedSandbox: sandbox instanceof Map
+            ? undefined
+            : Object.create(sandbox || null),
+        nestedRegistry: new Map(registry)
+    };
+}
+
+function getIfDefinition(definition, expression = "$if") {
+    if (expression !== "$if") {
+        const parts = expression.split(".");
+        const operator = parts.pop();
+        const source = parts.slice(1).join(".");
+
+        if (parts[0] !== "$if" || !source.startsWith("$") || !conditionalOperators.has(operator)) {
+            throw new Error(`Invalid AST conditional expression '${expression}'.`);
+        }
+
+        return { source, operator, branches: definition };
+    }
+
+    const sourceEntries = Object.entries(definition || {});
+    if (sourceEntries.length !== 1) {
+        throw new Error("AST '$if' requires exactly one condition source.");
+    }
+
+    const [source, comparison] = sourceEntries[0];
+    if (!source.startsWith("$")) {
+        throw new Error(`AST '$if' source '${source}' must be a scoped value.`);
+    }
+
+    const comparisonEntries = Object.entries(comparison || {});
+    if (comparisonEntries.length !== 1) {
+        throw new Error("AST '$if' requires exactly one comparison operator.");
+    }
+
+    const [operator, branches] = comparisonEntries[0];
+    if (!conditionalOperators.has(operator)) {
+        throw new Error(`AST '$if' does not support comparison operator '${operator}'.`);
+    }
+
+    return { source, operator, branches };
+}
+
+function parseConditionalValue(value, evaluate) {
+    if (value === "$true") return true;
+    if (value === "$false") return false;
+    if (value === "$null") return null;
+    if (value === "$undefined") return undefined;
+    if (value.startsWith("$")) return evaluate(value);
+    if (value === "true") return true;
+    if (value === "false") return false;
+    if (value === "null") return null;
+    if (value === "undefined") return undefined;
+    if (/^-?(?:\d+\.?\d*|\.\d+)$/.test(value)) return Number(value);
+    return value;
+}
+
+function resolveConditionalValueSync(value, context) {
+    if (typeof value === "string" && value.startsWith("$")) {
+        const scoped = resolveScopedPath(value, context.registry, context.sandbox);
+        if (scoped.found || /^\$[\w$-]+(?:\.[\w$-]+|\[\d+\])*$/.test(value)) {
+            return scoped.value;
+        }
+    }
+
+    return astSync({ executeAST: value, ...context });
+}
+
+async function resolveConditionalValueAsync(value, context) {
+    if (typeof value === "string" && value.startsWith("$")) {
+        const scoped = resolveScopedPath(value, context.registry, context.sandbox);
+        if (scoped.found || /^\$[\w$-]+(?:\.[\w$-]+|\[\d+\])*$/.test(value)) {
+            return scoped.value;
+        }
+    }
+
+    return await astAsync({ executeAST: value, ...context });
+}
+
+function selectConditionalBranch({ definition, evaluate, exists }) {
+    const { source, operator, branches } = definition;
+    if (!branches || typeof branches !== "object" || Array.isArray(branches)) {
+        throw new TypeError("AST '$if' comparison branches must be an object.");
+    }
+
+    const sourceValue = evaluate(source);
+    const sourceExists = exists(source);
+    for (const [condition, branch] of Object.entries(branches)) {
+        if (condition === "$else") continue;
+
+        const conditionValue = parseConditionalValue(condition, evaluate);
+        const matches = operator === "$exists"
+            ? sourceExists === Boolean(conditionValue)
+            : queryData(
+                { value: sourceValue },
+                { value: { [operator]: conditionValue } }
+            );
+        if (matches) {
+            return { found: true, branch };
+        }
+    }
+
+    return Object.prototype.hasOwnProperty.call(branches, "$else")
+        ? { found: true, branch: branches.$else }
+        : { found: false };
+}
+
+async function selectConditionalBranchAsync({ definition, evaluate, exists }) {
+    const { source, operator, branches } = definition;
+    if (!branches || typeof branches !== "object" || Array.isArray(branches)) {
+        throw new TypeError("AST '$if' comparison branches must be an object.");
+    }
+
+    const sourceValue = await evaluate(source);
+    const sourceExists = exists(source);
+    for (const [condition, branch] of Object.entries(branches)) {
+        if (condition === "$else") continue;
+
+        const conditionValue = await parseConditionalValue(condition, evaluate);
+        const matches = operator === "$exists"
+            ? sourceExists === Boolean(conditionValue)
+            : queryData(
+                { value: sourceValue },
+                { value: { [operator]: conditionValue } }
+            );
+        if (matches) {
+            return { found: true, branch };
+        }
+    }
+
+    return Object.prototype.hasOwnProperty.call(branches, "$else")
+        ? { found: true, branch: branches.$else }
+        : { found: false };
+}
+
+function resolveNullishSync(values, context) {
+    if (!Array.isArray(values)) {
+        throw new TypeError("AST '$null' requires an array of candidate values.");
+    }
+
+    for (const value of values) {
+        const resolved = resolveConditionalValueSync(value, context);
+        if (resolved !== null && resolved !== undefined) return resolved;
+    }
+}
+
+async function resolveNullishAsync(values, context) {
+    if (!Array.isArray(values)) {
+        throw new TypeError("AST '$null' requires an array of candidate values.");
+    }
+
+    for (const value of values) {
+        const resolved = await resolveConditionalValueAsync(value, context);
+        if (resolved !== null && resolved !== undefined) return resolved;
+    }
+}
+
 export function astSync({ executeAST, sandbox, node, registry } = {}) {
     const targetNode = executeAST !== undefined ? executeAST : node;
     if (targetNode === null || targetNode === undefined) return targetNode;
 
     if (!registry) {
-        registry = sandbox instanceof Map ? sandbox : new Map(Object.entries(sandbox || {}));
+        if (!(sandbox instanceof Map)) {
+            const activeScope = Object.create(baseSandboxScope);
+            Object.assign(activeScope, sandbox || {});
+            sandbox = activeScope;
+        }
+        registry = sandbox instanceof Map ? sandbox : new Map(Object.entries(sandbox));
     }
 
     // Leaf String Evaluator: route to OperatorJS engine
     if (typeof targetNode === "string") {
+        const scoped = resolveScopedPath(targetNode, registry, sandbox);
+        if (scoped.found) return scoped.value;
+
         if (targetNode.includes("$") || targetNode.includes("ObjectId()")) {
             let resolved = processOperators(node || null, targetNode, [], null, [], registry);
             return unpackTokens(resolved, registry);
@@ -162,19 +432,87 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
         }
 
         const keys = Object.keys(targetNode);
+        const structuralKey = keys.length === 1 ? keys[0] : undefined;
+
+        const isConditionalExpression = structuralKey === "$if" || structuralKey?.startsWith("$if.");
+
+        if (structuralKey?.startsWith("$") && structuralKey.includes(".$") && !isConditionalExpression) {
+            throw new Error(`AST operators must be composed as nested objects, not '${structuralKey}'.`);
+        }
+
+        if (structuralKey === "$null") {
+            return resolveNullishSync(targetNode.$null, { sandbox, node, registry });
+        }
+
+        if (structuralKey === "$await") {
+            throw new Error("AST '$await' requires astAsync.");
+        }
+
+        if (isConditionalExpression) {
+            const context = { sandbox, node, registry };
+            const selected = selectConditionalBranch({
+                definition: getIfDefinition(targetNode[structuralKey], structuralKey),
+                evaluate: (value) => resolveConditionalValueSync(value, context),
+                exists: (value) => resolveScopedPath(value, registry, sandbox).found
+            });
+            return selected.found
+                ? astSync({ executeAST: selected.branch, ...context })
+                : undefined;
+        }
+
+        if (structuralKey === "$for") {
+            const {
+                source: sourceExpression,
+                variable,
+                body,
+                shouldAwait
+            } = getForDefinition(targetNode.$for);
+            if (shouldAwait) {
+                throw new Error("AST '$for' with '$await' requires astAsync.");
+            }
+            const source = resolveConditionalValueSync(sourceExpression, { sandbox, node, registry });
+            if (!source || typeof source[Symbol.iterator] !== "function") {
+                throw new TypeError("AST '$for' source is not synchronously iterable.");
+            }
+
+            let result;
+            for (const value of source) {
+                const { iterationSandbox, iterationRegistry } = createIterationScope({
+                    sandbox,
+                    registry,
+                    variable,
+                    value
+                });
+                result = astSync({
+                    executeAST: body,
+                    sandbox: iterationSandbox,
+                    node,
+                    registry: iterationRegistry
+                });
+            }
+            return result;
+        }
         
         // Context Function/Operator Evaluation for single key objects
-        if (keys.length === 1) {
+        if (keys.length === 1 && keys[0].startsWith("$")) {
             const key = keys[0];
             const isPrefixed = key.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(key);
             const prefixedKey = isPrefixed ? key : `$${key}`;
 
-            let opFunc = registry.get(key) || registry.get(prefixedKey) ||
+            const scopedOperator = resolveScopedPath(key, registry, sandbox, true);
+            let opFunc = scopedOperator.found ? scopedOperator.value :
+                         registry.get(key) || registry.get(prefixedKey) ||
                          customOperators.get(key) || customOperators.get(prefixedKey) ||
                          (sandbox && typeof sandbox === 'object' ? (sandbox[key] || sandbox[prefixedKey]) : undefined);
 
             if (opFunc !== undefined) {
-                const evaluatedParam = astSync({ executeAST: targetNode[key], sandbox, node, registry });
+                const { nestedSandbox, nestedRegistry } = createNestedScope(sandbox, registry);
+                const evaluatedParam = astSync({
+                    executeAST: targetNode[key],
+                    sandbox: nestedSandbox,
+                    node,
+                    registry: nestedRegistry
+                });
                 let opCtx = { element: node, registry };
                 if (typeof opFunc === "function") {
                     const args = Array.isArray(evaluatedParam) ? evaluatedParam : [evaluatedParam];
@@ -187,7 +525,7 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
 
                     // Attempt invocation as function, fallback to constructor on TypeError
                     try {
-                        return opFunc.call(opCtx, evaluatedParam);
+                        return opFunc.call(opCtx, ...args);
                     } catch (e) {
                         if (e instanceof TypeError && /cannot be invoked without 'new'|class constructor/i.test(e.message)) {
                             return new opFunc(...args);
@@ -223,7 +561,7 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
                 finalValue = astSync({ executeAST: finalValue, sandbox, node, registry });
             }
 
-            if (finalKey === 'return' || finalKey === '$return') {
+            if (finalKey === '$return') {
                 return finalValue;
             }
 
@@ -244,11 +582,19 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
     if (targetNode === null || targetNode === undefined) return targetNode;
 
     if (!registry) {
-        registry = sandbox instanceof Map ? sandbox : new Map(Object.entries(sandbox || {}));
+        if (!(sandbox instanceof Map)) {
+            const activeScope = Object.create(baseSandboxScope);
+            Object.assign(activeScope, sandbox || {});
+            sandbox = activeScope;
+        }
+        registry = sandbox instanceof Map ? sandbox : new Map(Object.entries(sandbox));
     }
 
     // Leaf String Evaluator: route to OperatorJS engine
     if (typeof targetNode === "string") {
+        const scoped = resolveScopedPath(targetNode, registry, sandbox);
+        if (scoped.found) return scoped.value;
+
         if (targetNode.includes("$") || targetNode.includes("ObjectId()")) {
             let resolved = await processOperatorsAsync(node || null, targetNode, [], null, [], registry);
             return unpackTokens(resolved, registry);
@@ -269,19 +615,114 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
         }
 
         const keys = Object.keys(targetNode);
+        const structuralKey = keys.length === 1 ? keys[0] : undefined;
+
+        const isConditionalExpression = structuralKey === "$if" || structuralKey?.startsWith("$if.");
+
+        if (structuralKey?.startsWith("$") && structuralKey.includes(".$") && !isConditionalExpression) {
+            throw new Error(`AST operators must be composed as nested objects, not '${structuralKey}'.`);
+        }
+
+        if (structuralKey === "$null") {
+            return await resolveNullishAsync(targetNode.$null, { sandbox, node, registry });
+        }
+
+        if (structuralKey === "$await") {
+            return await astAsync({
+                executeAST: targetNode.$await,
+                sandbox,
+                node,
+                registry
+            });
+        }
+
+        if (isConditionalExpression) {
+            const context = { sandbox, node, registry };
+            const selected = await selectConditionalBranchAsync({
+                definition: getIfDefinition(targetNode[structuralKey], structuralKey),
+                evaluate: (value) => resolveConditionalValueAsync(value, context),
+                exists: (value) => resolveScopedPath(value, registry, sandbox).found
+            });
+            return selected.found
+                ? await astAsync({ executeAST: selected.branch, ...context })
+                : undefined;
+        }
+
+        if (structuralKey === "$for") {
+            const {
+                source: sourceExpression,
+                variable,
+                body,
+                shouldAwait
+            } = getForDefinition(targetNode.$for);
+            const source = await resolveConditionalValueAsync(sourceExpression, { sandbox, node, registry });
+            let result;
+            if (shouldAwait) {
+                const isIterable = source && (
+                    typeof source[Symbol.asyncIterator] === "function" ||
+                    typeof source[Symbol.iterator] === "function"
+                );
+                if (!isIterable) {
+                    throw new TypeError("AST '$for' '$await' source is not iterable.");
+                }
+
+                for await (const value of source) {
+                    const { iterationSandbox, iterationRegistry } = createIterationScope({
+                        sandbox,
+                        registry,
+                        variable,
+                        value
+                    });
+                    result = await astAsync({
+                        executeAST: body,
+                        sandbox: iterationSandbox,
+                        node,
+                        registry: iterationRegistry
+                    });
+                }
+            } else {
+                if (!source || typeof source[Symbol.iterator] !== "function") {
+                    throw new TypeError("AST '$for' source is not synchronously iterable.");
+                }
+
+                for (const value of source) {
+                    const { iterationSandbox, iterationRegistry } = createIterationScope({
+                        sandbox,
+                        registry,
+                        variable,
+                        value
+                    });
+                    result = await astAsync({
+                        executeAST: body,
+                        sandbox: iterationSandbox,
+                        node,
+                        registry: iterationRegistry
+                    });
+                }
+            }
+            return result;
+        }
         
         // Context Function/Operator Evaluation for single key objects
-        if (keys.length === 1) {
+        if (keys.length === 1 && keys[0].startsWith("$")) {
             const key = keys[0];
             const isPrefixed = key.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(key);
             const prefixedKey = isPrefixed ? key : `$${key}`;
 
-            let opFunc = registry.get(key) || registry.get(prefixedKey) ||
+            const scopedOperator = resolveScopedPath(key, registry, sandbox, true);
+            let opFunc = scopedOperator.found ? scopedOperator.value :
+                         registry.get(key) || registry.get(prefixedKey) ||
                          customOperators.get(key) || customOperators.get(prefixedKey) ||
                          (sandbox && typeof sandbox === 'object' ? (sandbox[key] || sandbox[prefixedKey]) : undefined);
 
             if (opFunc !== undefined) {
-                const evaluatedParam = await astAsync({ executeAST: targetNode[key], sandbox, node, registry });
+                const { nestedSandbox, nestedRegistry } = createNestedScope(sandbox, registry);
+                const evaluatedParam = await astAsync({
+                    executeAST: targetNode[key],
+                    sandbox: nestedSandbox,
+                    node,
+                    registry: nestedRegistry
+                });
                 let opCtx = { element: node, registry };
                 if (typeof opFunc === "function") {
                     const args = Array.isArray(evaluatedParam) ? evaluatedParam : [evaluatedParam];
@@ -294,7 +735,7 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
 
                     // Attempt invocation as function, fallback to constructor on TypeError
                     try {
-                        return await opFunc.call(opCtx, evaluatedParam);
+                        return await opFunc.call(opCtx, ...args);
                     } catch (e) {
                         if (e instanceof TypeError && /cannot be invoked without 'new'|class constructor/i.test(e.message)) {
                             return new opFunc(...args);
@@ -330,7 +771,7 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
                 finalValue = await astAsync({ executeAST: finalValue, sandbox, node, registry });
             }
 
-            if (finalKey === 'return' || finalKey === '$return') {
+            if (finalKey === '$return') {
                 return finalValue;
             }
 

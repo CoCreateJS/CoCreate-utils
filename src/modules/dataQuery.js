@@ -2,11 +2,14 @@ import { getValueFromObject } from "./getValueFromObject.js";
 import { isValidDate } from "./isValidDate.js";
 
 export function isEqualArray(arr1, arr2) {
+	if (!Array.isArray(arr1) || !Array.isArray(arr2)) {
+		return false;
+	}
 	if (arr1.length !== arr2.length) {
 		return false;
 	}
 	for (let i = 0; i < arr1.length; i++) {
-		if (!isEqualObject(arr1[i], arr2[i])) {
+		if (!isEqualValue(arr1[i], arr2[i])) {
 			return false;
 		}
 	}
@@ -14,6 +17,19 @@ export function isEqualArray(arr1, arr2) {
 }
 
 export function isEqualObject(obj1, obj2) {
+	if (Object.is(obj1, obj2)) return true;
+	if (!obj1 || !obj2 || typeof obj1 !== "object" || typeof obj2 !== "object") {
+		return false;
+	}
+	if (obj1 instanceof Date || obj2 instanceof Date) {
+		return obj1 instanceof Date &&
+			obj2 instanceof Date &&
+			obj1.getTime() === obj2.getTime();
+	}
+	if (Array.isArray(obj1) || Array.isArray(obj2)) {
+		return isEqualArray(obj1, obj2);
+	}
+
 	const keys1 = Object.keys(obj1);
 	const keys2 = Object.keys(obj2);
 
@@ -22,12 +38,28 @@ export function isEqualObject(obj1, obj2) {
 	}
 
 	for (const key of keys1) {
-		if (obj1[key] !== obj2[key]) {
+		if (!Object.prototype.hasOwnProperty.call(obj2, key) || !isEqualValue(obj1[key], obj2[key])) {
 			return false;
 		}
 	}
 
 	return true;
+}
+
+function isEqualValue(value1, value2) {
+	if (Object.is(value1, value2)) return true;
+	if (Array.isArray(value1) || Array.isArray(value2)) {
+		return isEqualArray(value1, value2);
+	}
+	if (
+		value1 &&
+		value2 &&
+		typeof value1 === "object" &&
+		typeof value2 === "object"
+	) {
+		return isEqualObject(value1, value2);
+	}
+	return false;
 }
 
 function queryMatch(data, query) {
@@ -72,18 +104,10 @@ function queryMatch(data, query) {
 					let queryStatus = false;
 					switch (property) {
 						case "$eq":
-							if (Array.isArray(dataValue) && Array.isArray(queryValue)) {
-								queryStatus = isEqualArray(dataValue, queryValue);
-							} else {
-								queryStatus = dataValue === queryValue;
-							}
+							queryStatus = isEqualValue(dataValue, queryValue);
 							break;
 						case "$ne":
-							if (Array.isArray(dataValue) && Array.isArray(queryValue)) {
-								queryStatus = !isEqualArray(dataValue, queryValue);
-							} else {
-								queryStatus = dataValue !== queryValue;
-							}
+							queryStatus = !isEqualValue(dataValue, queryValue);
 							break;
 						case "$not":
 							queryStatus = !queryMatch(data, {
