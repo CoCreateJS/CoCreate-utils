@@ -25,6 +25,7 @@ export { ulid, ulidDecode } from "./modules/ulid.js";
 export { checkValue } from "./modules/checkValue.js";
 export { isValidDate } from "./modules/isValidDate.js";
 export { objectToSearchParams } from "./modules/objectToSearchParams.js";
+export { searchParamsToObject } from "./modules/searchParamsToObject.js";
 export { dotNotationToObject } from "./modules/dotNotationToObject.js";
 export { objectToDotNotation } from "./modules/objectToDotNotation.js";
 export { getValueFromObject } from "./modules/getValueFromObject.js";
@@ -49,6 +50,7 @@ import { ulid, ulidDecode } from "./modules/ulid.js";
 import { checkValue } from "./modules/checkValue.js";
 import { isValidDate } from "./modules/isValidDate.js";
 import { objectToSearchParams } from "./modules/objectToSearchParams.js";
+import { searchParamsToObject } from "./modules/searchParamsToObject.js";
 import { dotNotationToObject } from "./modules/dotNotationToObject.js";
 import { objectToDotNotation } from "./modules/objectToDotNotation.js";
 import { getValueFromObject } from "./modules/getValueFromObject.js";
@@ -78,6 +80,7 @@ const utils = {
     objectToDotNotation,
     getValueFromObject,
     objectToSearchParams,
+    searchParamsToObject,
     domParser,
     parseTextToHtml,
     escapeHtml,
