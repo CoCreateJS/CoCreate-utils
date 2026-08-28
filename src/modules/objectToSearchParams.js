@@ -7,21 +7,19 @@ export function objectToSearchParams(paramsObj) {
 		return "";
 	}
 
-	const filteredObj = {};
-	for (const key in paramsObj) {
-		if (Object.hasOwn(paramsObj, key)) {
-			const value = paramsObj[key];
-			if (value !== null && value !== undefined) {
-				filteredObj[key] = value;
+	const searchParams = new URLSearchParams();
+	for (const [key, value] of Object.entries(paramsObj)) {
+		if (Array.isArray(value)) {
+			for (const item of value) {
+				if (item !== null && item !== undefined) {
+					searchParams.append(key, item);
+				}
 			}
+		} else if (value !== null && value !== undefined) {
+			searchParams.append(key, value);
 		}
 	}
 
-	if (Object.keys(filteredObj).length === 0) {
-		return "";
-	}
-
-	const searchParams = new URLSearchParams(filteredObj);
 	const queryString = searchParams.toString();
 
 	return queryString ? `?${queryString}` : "";
