@@ -1,5 +1,7 @@
-export function dotNotationToObject(data, obj = {}) {
+export function dotNotationToObject(data = {}, obj = {}) {
 	try {
+		data ??= {};
+		obj ??= {};
 		let arrayGroup = {};
 
 		for (const key of Object.keys(data)) {
