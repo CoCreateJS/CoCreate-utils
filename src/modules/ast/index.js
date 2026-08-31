@@ -289,6 +289,46 @@ function createNestedScope(sandbox, registry) {
     };
 }
 
+function getFunctionDefinition(definition) {
+    if (!definition || typeof definition !== "object" || Array.isArray(definition)) {
+        throw new TypeError("AST '$function' requires an object definition.");
+    }
+
+    const params = definition.params || [];
+    if (!Array.isArray(params) || params.some(param => typeof param !== "string")) {
+        throw new TypeError("AST '$function.params' must be an array of names.");
+    }
+    if (!Object.prototype.hasOwnProperty.call(definition, "body")) {
+        throw new Error("AST '$function' requires a body.");
+    }
+
+    return { params, body: definition.body, bind: definition.bind };
+}
+
+function createFunctionScope({ sandbox, registry, params, args, thisArg }) {
+    const functionSandbox = sandbox instanceof Map
+        ? undefined
+        : Object.create(sandbox || null);
+    const functionRegistry = new Map(registry);
+
+    functionRegistry.set("$this", thisArg);
+    functionRegistry.set("this", thisArg);
+    if (functionSandbox) functionSandbox.$this = thisArg;
+
+    params.forEach((param, index) => {
+        const name = param.replace(/^\$/, "");
+        const value = args[index];
+        functionRegistry.set(name, value);
+        functionRegistry.set(`$${name}`, value);
+        if (functionSandbox) {
+            functionSandbox[name] = value;
+            functionSandbox[`$${name}`] = value;
+        }
+    });
+
+    return { functionSandbox, functionRegistry };
+}
+
 function isClassLike(func) {
     if (typeof func !== "function") return false;
 
@@ -501,6 +541,28 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
             throw new Error("AST '$await' requires astAsync.");
         }
 
+        if (structuralKey === "$function") {
+            const { params, body, bind } = getFunctionDefinition(targetNode.$function);
+            const callback = function (...args) {
+                const { functionSandbox, functionRegistry } = createFunctionScope({
+                    sandbox,
+                    registry,
+                    params,
+                    args,
+                    thisArg: this
+                });
+                return astSync({
+                    executeAST: body,
+                    sandbox: functionSandbox,
+                    node,
+                    registry: functionRegistry
+                });
+            };
+            if (bind === undefined) return callback;
+            const thisArg = astSync({ executeAST: bind, sandbox, node, registry });
+            return callback.bind(thisArg);
+        }
+
         if (isConditionalExpression) {
             const context = { sandbox, node, registry };
             const selected = selectConditionalBranch({
@@ -585,6 +647,28 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
 
         const resolvedObject = {};
         for (const key of keys) {
+            if (key === "$return") {
+                return astSync({
+                    executeAST: targetNode[key],
+                    sandbox,
+                    node,
+                    registry
+                });
+            }
+
+            if (key !== "$return" && key.startsWith("$")) {
+                const operator = resolveOperator(key, registry, sandbox);
+                if (typeof operator.value === "function") {
+                    resolvedObject[key] = astSync({
+                        executeAST: { [key]: targetNode[key] },
+                        sandbox,
+                        node,
+                        registry
+                    });
+                    continue;
+                }
+            }
+
             let finalKey = key;
 
             if (key.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(key)) {
@@ -680,6 +764,28 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
                 node,
                 registry
             });
+        }
+
+        if (structuralKey === "$function") {
+            const { params, body, bind } = getFunctionDefinition(targetNode.$function);
+            const callback = function (...args) {
+                const { functionSandbox, functionRegistry } = createFunctionScope({
+                    sandbox,
+                    registry,
+                    params,
+                    args,
+                    thisArg: this
+                });
+                return astAsync({
+                    executeAST: body,
+                    sandbox: functionSandbox,
+                    node,
+                    registry: functionRegistry
+                });
+            };
+            if (bind === undefined) return callback;
+            const thisArg = await astAsync({ executeAST: bind, sandbox, node, registry });
+            return callback.bind(thisArg);
         }
 
         if (isConditionalExpression) {
@@ -788,6 +894,28 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
 
         const resolvedObject = {};
         for (const key of keys) {
+            if (key === "$return") {
+                return await astAsync({
+                    executeAST: targetNode[key],
+                    sandbox,
+                    node,
+                    registry
+                });
+            }
+
+            if (key !== "$return" && key.startsWith("$")) {
+                const operator = resolveOperator(key, registry, sandbox);
+                if (typeof operator.value === "function") {
+                    resolvedObject[key] = await astAsync({
+                        executeAST: { [key]: targetNode[key] },
+                        sandbox,
+                        node,
+                        registry
+                    });
+                    continue;
+                }
+            }
+
             let finalKey = key;
 
             if (key.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(key)) {
