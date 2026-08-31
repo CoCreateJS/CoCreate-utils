@@ -190,6 +190,49 @@ function resolveScopedPath(expression, registry, sandbox, bindFunction = false) 
     return { found: true, value };
 }
 
+function resolveOperator(expression, registry, sandbox) {
+    if (typeof expression !== "string" || !expression.startsWith("$")) {
+        return { found: false, value: undefined };
+    }
+
+    const [root, ...path] = expression
+        .replace(/\[(\d+)\]/g, ".$1")
+        .split(".");
+    const unprefixedRoot = root.slice(1);
+    let value;
+
+    if (registry?.has(root)) {
+        value = registry.get(root);
+    } else if (registry?.has(unprefixedRoot)) {
+        value = registry.get(unprefixedRoot);
+    } else if (customOperators.has(root)) {
+        value = customOperators.get(root);
+    } else if (customOperators.has(unprefixedRoot)) {
+        value = customOperators.get(unprefixedRoot);
+    } else if (sandbox && root in Object(sandbox)) {
+        value = sandbox[root];
+    } else if (sandbox && unprefixedRoot in Object(sandbox)) {
+        value = sandbox[unprefixedRoot];
+    } else {
+        return { found: false, value: undefined };
+    }
+
+    let owner = null;
+    for (const property of path) {
+        if (value === null || value === undefined || !(property in Object(value))) {
+            return { found: false, value: undefined };
+        }
+        owner = value;
+        value = value[property];
+    }
+
+    if (owner && typeof value === "function") {
+        value = value.bind(owner);
+    }
+
+    return { found: true, value };
+}
+
 function getForDefinition(definition) {
     let shouldAwait = false;
     const modifierEntries = Object.entries(definition || {});
@@ -244,6 +287,16 @@ function createNestedScope(sandbox, registry) {
             : Object.create(sandbox || null),
         nestedRegistry: new Map(registry)
     };
+}
+
+function isClassLike(func) {
+    if (typeof func !== "function") return false;
+
+    const source = Function.prototype.toString.call(func);
+    if (/^class\s|^class{/.test(source)) return true;
+
+    return !!func.prototype && Object.getOwnPropertyNames(func.prototype)
+        .some(member => member !== "constructor");
 }
 
 function getIfDefinition(definition, expression = "$if") {
@@ -496,14 +549,9 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
         // Context Function/Operator Evaluation for single key objects
         if (keys.length === 1 && keys[0].startsWith("$")) {
             const key = keys[0];
-            const isPrefixed = key.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(key);
-            const prefixedKey = isPrefixed ? key : `$${key}`;
 
-            const scopedOperator = resolveScopedPath(key, registry, sandbox, true);
-            let opFunc = scopedOperator.found ? scopedOperator.value :
-                         registry.get(key) || registry.get(prefixedKey) ||
-                         customOperators.get(key) || customOperators.get(prefixedKey) ||
-                         (sandbox && typeof sandbox === 'object' ? (sandbox[key] || sandbox[prefixedKey]) : undefined);
+            const resolvedOperator = resolveOperator(key, registry, sandbox);
+            let opFunc = resolvedOperator.value;
 
             if (opFunc !== undefined) {
                 const { nestedSandbox, nestedRegistry } = createNestedScope(sandbox, registry);
@@ -517,9 +565,7 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
                 if (typeof opFunc === "function") {
                     const args = Array.isArray(evaluatedParam) ? evaluatedParam : [evaluatedParam];
 
-                    // Pre-check for ES6 Class syntax
-                    const isNativeClass = /^class\s|^class{/.test(Function.prototype.toString.call(opFunc));
-                    if (isNativeClass) {
+                    if (isClassLike(opFunc)) {
                         return new opFunc(...args);
                     }
 
@@ -706,14 +752,9 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
         // Context Function/Operator Evaluation for single key objects
         if (keys.length === 1 && keys[0].startsWith("$")) {
             const key = keys[0];
-            const isPrefixed = key.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(key);
-            const prefixedKey = isPrefixed ? key : `$${key}`;
 
-            const scopedOperator = resolveScopedPath(key, registry, sandbox, true);
-            let opFunc = scopedOperator.found ? scopedOperator.value :
-                         registry.get(key) || registry.get(prefixedKey) ||
-                         customOperators.get(key) || customOperators.get(prefixedKey) ||
-                         (sandbox && typeof sandbox === 'object' ? (sandbox[key] || sandbox[prefixedKey]) : undefined);
+            const resolvedOperator = resolveOperator(key, registry, sandbox);
+            let opFunc = resolvedOperator.value;
 
             if (opFunc !== undefined) {
                 const { nestedSandbox, nestedRegistry } = createNestedScope(sandbox, registry);
@@ -727,9 +768,7 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
                 if (typeof opFunc === "function") {
                     const args = Array.isArray(evaluatedParam) ? evaluatedParam : [evaluatedParam];
 
-                    // Pre-check for ES6 Class syntax
-                    const isNativeClass = /^class\s|^class{/.test(Function.prototype.toString.call(opFunc));
-                    if (isNativeClass) {
+                    if (isClassLike(opFunc)) {
                         return new opFunc(...args);
                     }
 
