@@ -671,7 +671,7 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
 
             let finalKey = key;
 
-            if (key.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(key)) {
+            if (key.startsWith("$") && !["$array", "filter", "$storage", "$database"].includes(key)) {
                 const resolvedKey = astSync({ executeAST: key, sandbox, node, registry });
                 if (typeof resolvedKey === "string" || typeof resolvedKey === "number") {
                     finalKey = String(resolvedKey);
@@ -682,7 +682,7 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
 
             let finalValue = targetNode[key];
             if (typeof finalValue === "string") {
-                if (finalValue.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(finalValue)) {
+                if (finalValue.startsWith("$") && !["$array", "filter", "$storage", "$database"].includes(finalValue)) {
                     finalValue = astSync({ executeAST: finalValue, sandbox, node, registry });
                 } else if (finalValue.includes('{{') && finalValue.includes('}}')) {
                     finalValue = resolveInlinePlaceholdersSync(finalValue, { sandbox, node, registry });
@@ -918,7 +918,7 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
 
             let finalKey = key;
 
-            if (key.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(key)) {
+            if (key.startsWith("$") && !["$array", "filter", "$storage", "$database"].includes(key)) {
                 const resolvedKey = await astAsync({ executeAST: key, sandbox, node, registry });
                 if (typeof resolvedKey === "string" || typeof resolvedKey === "number") {
                     finalKey = String(resolvedKey);
@@ -929,7 +929,7 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
 
             let finalValue = targetNode[key];
             if (typeof finalValue === "string") {
-                if (finalValue.startsWith("$") && !["$array", "$filter", "$storage", "$database"].includes(finalValue)) {
+                if (finalValue.startsWith("$") && !["$array", "filter", "$storage", "$database"].includes(finalValue)) {
                     finalValue = await astAsync({ executeAST: finalValue, sandbox, node, registry });
                 } else if (finalValue.includes('{{') && finalValue.includes('}}')) {
                     finalValue = await resolveInlinePlaceholdersAsync(finalValue, { sandbox, node, registry });
