@@ -59,6 +59,108 @@ const { uid, ObjectId } = require("@cocreate/utils");
 const { getValueFromObject } = require("@cocreate/utils/getValueFromObject");
 ```
 
+## Querying and Sorting
+
+CoCreate exposes one data-object API across MongoDB, IndexedDB, MySQL, and
+other storage providers. MongoDB query and sort behavior is the canonical
+contract. A storage wrapper may use its native query engine or indexes as an
+optimization, but it must return the same logical result.
+
+The shared helpers are available from `@cocreate/utils`:
+
+```js
+import { queryData, searchData, sortData } from "@cocreate/utils";
+```
+
+### Querying
+
+`queryData(object, query)` evaluates a MongoDB-style query against one object.
+Keys may use dot notation to address nested values.
+
+```js
+const matches = queryData(
+    {
+        status: "active",
+        profile: { score: 82 },
+        tags: ["customer", "priority"]
+    },
+    {
+        status: "active",
+        "profile.score": { $gte: 80 },
+        tags: { $in: ["priority"] }
+    }
+);
+```
+
+Queries can combine conditions using `$and`, `$or`, and `$nor`. Supported
+field operators include equality and inequality comparisons, membership,
+array matching, existence, regular expressions, type checks, and modulus
+checks. Storage wrappers should translate these conditions to their native
+query language when equivalent behavior is available and use the shared
+helper as the compatibility fallback.
+
+`searchData(object, search)` performs text-oriented matching across an object.
+It is separate from structured `queryData` filtering and can be applied after
+a record satisfies the structured query.
+
+### Multi-field sorting
+
+`sortData(data, sort)` applies sort fields in their declared order:
+
+```js
+const sorted = sortData(records, [
+    { key: "status", direction: "asc" },
+    { key: "modified.on", direction: "desc" },
+    { key: "_id", direction: "desc" }
+]);
+```
+
+The first field is the primary sort. The second field is compared only when
+the primary values are equal, and each later field breaks ties left by all
+preceding fields. A missing secondary or tertiary value does not exclude the
+record.
+
+Sorting follows MongoDB conventions:
+
+- Keys support dot notation, including nested values such as `modified.on`.
+- A missing field is treated as `null` for comparison.
+- Null and missing values sort before ordinary values in ascending order and
+  after them in descending order.
+- Values of different types follow MongoDB's BSON comparison order.
+- Array and object comparisons should follow MongoDB behavior where the
+  corresponding JavaScript representation permits it.
+- Equivalent sort keys do not imply a stable order. Include `_id` as the final
+  field when deterministic pagination or rendering is required.
+
+### Storage-native sorting
+
+Storage wrappers should prefer native sorting when it produces the canonical
+result:
+
+- MongoDB can use its native sort directly.
+- IndexedDB can use one cursor over a compound index when every indexed field
+  is present and all fields use the same direction.
+- SQL wrappers can translate the sort to `ORDER BY` while explicitly matching
+  MongoDB's null ordering.
+- Mixed directions, optional IndexedDB index fields, or incompatible native
+  type ordering must use the shared comparator as a fallback.
+
+IndexedDB compound indexes omit records that do not contain every indexed
+field. Therefore, an optional secondary or tertiary field must not be placed
+in the only cursor used to collect results unless the wrapper also collects
+the omitted records. Falling back to `sortData` preserves the unified
+behavior.
+
+### Pagination
+
+Filtering and the complete canonical ordering must be established before
+`index` and `limit` are applied. Paginating an incompletely sorted result set
+can return different records across storage providers.
+
+For cursor pagination, include `_id` as the final sort key and build the next
+range from all sort-key values plus `_id`. This provides a deterministic
+boundary when multiple records share the same preceding values.
+
 ## Build
 
 ```shell
@@ -75,6 +177,7 @@ npm run build:umd
 # Table of Contents
 
 -   [Table of Contents](#table-of-contents)
+-   [Querying and Sorting](#querying-and-sorting)
 -   [Announcements](#announcements)
 -   [Roadmap](#roadmap)
 -   [How to Contribute](#how-to-contribute)

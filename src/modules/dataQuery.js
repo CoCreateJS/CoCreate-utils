@@ -289,27 +289,84 @@ export function searchData(data, search) {
 	return true;
 }
 
+function getMongoTypeOrder(value) {
+	if (value?._bsontype === "MinKey") return 0;
+	if (value == null) return 1;
+	if (typeof value === "number" || typeof value === "bigint") return 2;
+	if (typeof value === "string" || typeof value === "symbol") return 3;
+	if (Array.isArray(value)) return value.length ? 5 : 0.5;
+	if (value instanceof Uint8Array || value instanceof ArrayBuffer) return 6;
+	if (value?._bsontype === "ObjectId" || value?.constructor?.name === "ObjectId")
+		return 7;
+	if (typeof value === "boolean") return 8;
+	if (value instanceof Date) return 9;
+	if (value?._bsontype === "Timestamp") return 10;
+	if (value instanceof RegExp) return 11;
+	if (typeof value === "function") return 12;
+	if (value?._bsontype === "MaxKey") return 14;
+	if (typeof value === "object") return 4;
+	return 13;
+}
+
+function compareStrings(a, b) {
+	const aString = String(a);
+	const bString = String(b);
+	if (aString === bString) return 0;
+	return aString < bString ? -1 : 1;
+}
+
+function compareMongoObjects(a, b) {
+	const aEntries = Object.entries(a);
+	const bEntries = Object.entries(b);
+	const length = Math.min(aEntries.length, bEntries.length);
+	for (let index = 0; index < length; index++) {
+		const [aKey, aValue] = aEntries[index];
+		const [bKey, bValue] = bEntries[index];
+		const typeComparison = getMongoTypeOrder(aValue) - getMongoTypeOrder(bValue);
+		if (typeComparison) return Math.sign(typeComparison);
+		const keyComparison = compareStrings(aKey, bKey);
+		if (keyComparison) return keyComparison;
+		const valueComparison = compareMongoValues(aValue, bValue);
+		if (valueComparison) return valueComparison;
+	}
+	return Math.sign(aEntries.length - bEntries.length);
+}
+
+function getArraySortValue(value, direction) {
+	if (!value.length) return value;
+	const sorted = [...value].sort(compareMongoValues);
+	return direction === "desc" ? sorted[sorted.length - 1] : sorted[0];
+}
+
+function compareMongoValues(a, b, direction = "asc") {
+	if (Array.isArray(a)) a = getArraySortValue(a, direction);
+	if (Array.isArray(b)) b = getArraySortValue(b, direction);
+	if (Object.is(a, b) || (a == null && b == null)) return 0;
+
+	const typeComparison = getMongoTypeOrder(a) - getMongoTypeOrder(b);
+	if (typeComparison) return Math.sign(typeComparison);
+	if (a == null || b == null) return a == null ? -1 : 1;
+
+	if (typeof a === "number" || typeof a === "bigint")
+		return a < b ? -1 : a > b ? 1 : 0;
+	if (typeof a === "string" || typeof a === "symbol")
+		return compareStrings(a, b);
+	if (typeof a === "boolean") return Number(a) - Number(b);
+	if (a instanceof Date) return Math.sign(a.getTime() - b.getTime());
+	if (a instanceof RegExp) return compareStrings(a.toString(), b.toString());
+	if (typeof a === "object") return compareMongoObjects(a, b);
+	return compareStrings(a, b);
+}
+
 export function sortData(data, sort) {
 	return data.sort((a, b) => {
 		for (let i = 0; i < sort.length; i++) {
-			let key = sort[i].key;
-			if (a[key] == null && b[key] == null) continue;
-			if (a[key] == null) return sort[i].direction === "desc" ? -1 : 1;
-			if (b[key] == null) return sort[i].direction === "desc" ? 1 : -1;
-
-			if (typeof a[key] !== typeof b[key]) {
-				return typeof a[key] < typeof b[key] ? -1 : 1;
-			}
-
-			if (a[key] !== b[key]) {
-				if (typeof a[key] === "string") {
-					return sort[i].direction === "desc"
-						? b[key].localeCompare(a[key])
-						: a[key].localeCompare(b[key]);
-				} else {
-					return sort[i].direction === "desc" ? b[key] - a[key] : a[key] - b[key];
-				}
-			}
+			const key = sort[i].key;
+			const direction = sort[i].direction === "desc" ? "desc" : "asc";
+			const aValue = getValueFromObject(a, key);
+			const bValue = getValueFromObject(b, key);
+			const comparison = compareMongoValues(aValue, bValue, direction);
+			if (comparison) return direction === "desc" ? -comparison : comparison;
 		}
 		return 0;
 	});
