@@ -87,7 +87,10 @@ export function queryElements({ element = document, prefix, selector }) {
 
 		if (!selector && element.nodeType === 1) {
 			let queryName = prefix ? `${prefix}-query` : null;
-			if (queryName) selector = element.getAttribute(queryName);
+			// Query expressions such as "$closest form" are syntax for this
+			// parser, not values for the AST-aware getAttribute override.
+			if (queryName)
+				selector = element.attributes.getNamedItem(queryName)?.value;
 			if (!selector) return [];
 		}
 
