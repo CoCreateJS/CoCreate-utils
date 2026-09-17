@@ -1,4 +1,4 @@
-export function objectToSearchParams(paramsObj) {
+export function objectToSearchParams(paramsObj, includePrefix = true) {
 	if (
 		!paramsObj ||
 		typeof paramsObj !== "object" ||
@@ -22,5 +22,6 @@ export function objectToSearchParams(paramsObj) {
 
 	const queryString = searchParams.toString();
 
-	return queryString ? `?${queryString}` : "";
+	if (!queryString) return "";
+	return includePrefix ? `?${queryString}` : queryString;
 }

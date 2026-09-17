@@ -762,9 +762,13 @@ export class Security {
 
             switch (op) {
                 case "timestamp":
-                    return opts.format === "seconds"
-                        ? Math.floor(Date.now() / 1000)
-                        : Date.now();
+                    if (opts.format === "seconds") {
+                        return Math.floor(Date.now() / 1000);
+                    }
+                    if (opts.format === "iso-basic") {
+                        return new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+                    }
+                    return Date.now();
 
                 case "hash":
                     return this.hash(acc, opts.algorithm || "sha256", opts.digest || "hex");
