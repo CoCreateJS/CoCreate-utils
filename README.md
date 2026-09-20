@@ -227,3 +227,21 @@ This software is dual-licensed under the GNU Affero General Public License versi
 -   **Commercial Use**: For-profit companies and individuals intending to use this software for commercial purposes must obtain a commercial license. The commercial license is available when you sign up for an API key on our [website](https://cocreate.app). This license permits proprietary use and modification of the software without the copyleft requirements of the AGPLv3. It is ideal for integrating this software into proprietary commercial products and applications.
 
 If you have not purchased a commercial license and intend to use this software for commercial purposes, you are required to sign up for an API key on our website.
+
+### Leading `$this` selector
+
+Start a query branch with `$this` to return the current element, or attach a
+CSS selector to test that element with `matches()` before continuing:
+
+```html
+click-query="$this:checked $closest .api-type-filter input:checked[]"
+click-query="$this.active[aria-pressed='true'] $parent .target"
+```
+
+`$this#id`, `$this.class`, `$this[attribute]`, and pseudo-classes all match the
+current element, rather than descendants. A failed match stops only that
+comma-separated branch. Bare `$this` returns the current element without a
+test. Whitespace after the attached selector starts the remaining query;
+whitespace inside quoted attributes or parentheses remains part of the test.
+`$this` is supported only at the beginning of a branch. Existing traversal
+operators and descendant selectors continue normally after it.

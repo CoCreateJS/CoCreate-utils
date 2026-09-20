@@ -249,30 +249,35 @@ export function searchData(data, search) {
 	for (let i = 0; i < search.length; i++) {
 		let searchValue = search[i].value;
 		if (!Array.isArray(searchValue)) searchValue = [searchValue];
+		const caseSensitive =
+			search[i].caseSensitive === true ||
+			search[i].caseSensitive === "true";
+		searchValue = searchValue.map((value) => {
+			const text = String(value ?? "");
+			return caseSensitive ? text : text.toLowerCase();
+		});
 		for (let key in data) {
 			let value = data[key];
 			let status = false;
+			if (value === null || value === undefined) value = "";
 			switch (typeof value) {
 				case "number":
+				case "boolean":
+				case "bigint":
+				case "symbol":
 					value = value.toString();
 					break;
 				case "object":
-					value = JSON.stringify(value);
+					value = JSON.stringify(value) || "";
 					break;
 				case "function":
 					value = value.toString();
 					break;
 			}
-			if (search[i].caseSensitive != "true" || search[i].caseSensitive != true)
-				value = value.toLowerCase();
+			if (!caseSensitive) value = value.toLowerCase();
 
-			for (let i = 0; i < searchValue.length; i++) {
-				let searchString = searchValue[i];
-				if (
-					search[i].caseSensitive != "true" ||
-					search[i].caseSensitive != true
-				)
-					searchString = searchString.toLowerCase();
+			for (let j = 0; j < searchValue.length; j++) {
+				const searchString = searchValue[j];
 
 				if (searchString === "" && search[i].operator === "and") {
 					if (value !== "") return false;
@@ -284,7 +289,10 @@ export function searchData(data, search) {
 				else if (search[i].operator == "and") return false;
 			}
 		}
-		if (search[i].value.length && search[i].operator == "or") return false;
+		if (
+			searchValue.some((value) => value.length > 0) &&
+			search[i].operator === "or"
+		) return false;
 	}
 	return true;
 }

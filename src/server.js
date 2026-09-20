@@ -67,7 +67,10 @@ import { getAttributes, getAttributeNames, setAttributeNames } from "./modules/a
 import security from './modules/security.js';
 
 
+import * as valueHandlers from "./modules/valueHandler.js";
+
 const utils = {
+    ...valueHandlers,
     cloudProviders,
     getClientInfo,
     getRelativePath,
@@ -104,3 +107,5 @@ const utils = {
 };
 
 export default utils;
+
+export { getValueAttribute, transformValue, convertValue, caseHandler, regex, encodeValue, decodeValue, parseJson, toBoolean, toArray } from "./modules/valueHandler.js";

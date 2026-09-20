@@ -81,6 +81,35 @@ function querySelector(element, selector) {
 		: element.querySelector(selector);
 }
 
+// Split only outside CSS brackets, parentheses, strings, and escapes.
+function splitSelector(selector, separator, firstOnly = false) {
+	const parts = [];
+	let start = 0;
+	let depth = 0;
+	let quote = "";
+	for (let i = 0; i < selector.length; i++) {
+		const char = selector[i];
+		if (char === "\\") {
+			i++;
+			continue;
+		}
+		if (quote) {
+			if (char === quote) quote = "";
+		} else if (char === '"' || char === "'") {
+			quote = char;
+		} else if (char === "[" || char === "(") {
+			depth++;
+		} else if (char === "]" || char === ")") {
+			depth--;
+		} else if (!depth && separator.test(char)) {
+			parts.push(selector.slice(start, i).trim());
+			if (firstOnly) return [...parts, selector.slice(i).trim()];
+			start = i + 1;
+		}
+	}
+	return firstOnly ? [selector, ""] : [...parts, selector.slice(start).trim()];
+}
+
 export function queryElements({ element = document, prefix, selector }) {
 	try {
 		let elements = new Set();
@@ -94,7 +123,7 @@ export function queryElements({ element = document, prefix, selector }) {
 			if (!selector) return [];
 		}
 
-		let selectors = selector.split(/,(?![^()\[\]]*[)\]])/g);
+		let selectors = splitSelector(selector, /,/);
 		for (let i = 0; i < selectors.length; i++) {
 			if (!selectors[i]) continue;
 
@@ -106,6 +135,12 @@ export function queryElements({ element = document, prefix, selector }) {
 			}
 
 			let remainingSelector = selectors[i].trim();
+			// $this is a leading guard, not a traversal operator.
+			if (remainingSelector.startsWith("$this")) {
+				const [selfSelector, remaining] = splitSelector(remainingSelector.slice(5), /\s/, true);
+				if (selfSelector && !queriedElement.matches?.(selfSelector)) continue;
+				remainingSelector = remaining;
+			}
 			let match;
 
 			while ((match = queryTypesRegex.exec(remainingSelector)) !== null) {

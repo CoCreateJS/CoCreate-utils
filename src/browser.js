@@ -68,7 +68,10 @@ import { clickedElement } from "./modules/clickedElement.js";
 import { astSync, astAsync } from "./modules/ast/index.js";
 import { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 
+import * as valueHandlers from "./modules/valueHandler.js";
+
 const utils = {
+    ...valueHandlers,
     getClientInfo,
     cloudProviders,
     getRelativePath,
@@ -107,3 +110,5 @@ const utils = {
 };
 
 export default utils;
+
+export { getValueAttribute, transformValue, convertValue, caseHandler, regex, encodeValue, decodeValue, parseJson, toBoolean, toArray } from "./modules/valueHandler.js";
