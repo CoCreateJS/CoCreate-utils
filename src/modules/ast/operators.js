@@ -294,7 +294,15 @@ export const customOperators = new Map(
         $client_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("clientId") : "",
         $session_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("session_id") : "",
         $this: function () { return this.element; },
-        $value: function () { return this.element && typeof this.element.getValue === 'function' ? this.element.getValue() : ""; },
+        $value: function () {
+            if (!this.element) return "";
+            if (typeof this.element.getValueSync === "function") {
+                return this.element.getValueSync();
+            }
+            return typeof this.element.getValue === "function"
+                ? this.element.getValue()
+                : "";
+        },
         $innerWidth: () => typeof window !== 'undefined' ? window.innerWidth : 0,
         $innerHeight: () => typeof window !== 'undefined' ? window.innerHeight : 0,
         $href: () => typeof window !== 'undefined' ? window.location.href.replace(/\/$/, "") : "",

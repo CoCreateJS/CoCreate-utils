@@ -64,6 +64,7 @@ function isEqualValue(value1, value2) {
 
 function queryMatch(data, query) {
 	for (let key of Object.keys(query)) {
+		const queryEntry = query[key];
 		let dataValue;
 		try {
 			dataValue = getValueFromObject(data, key, true);
@@ -71,21 +72,17 @@ function queryMatch(data, query) {
 			return false;
 		}
 
-		if (
-			typeof query[key] === "string" ||
-			typeof query[key] === "number" ||
-			typeof query[key] === "boolean"
-		) {
-			if (Array.isArray(dataValue)) return dataValue.includes(query[key]);
-			else return dataValue === query[key];
-		} else if (Array.isArray(query[key])) {
+		if (queryEntry === null || typeof queryEntry !== "object") {
+			if (Array.isArray(dataValue)) return dataValue.includes(queryEntry);
+			else return Object.is(dataValue, queryEntry);
+		} else if (Array.isArray(queryEntry)) {
 			if (Array.isArray(dataValue)) {
-				return isEqualArray(dataValue, query[key]);
+				return isEqualArray(dataValue, queryEntry);
 			} else {
 				return false;
 			}
 		} else {
-			for (let property of Object.keys(query[key])) {
+			for (let property of Object.keys(queryEntry)) {
 				if (property === "$options") continue;
 				if (!property.startsWith("$")) {
 					if (typeof dataValue !== "object") {
@@ -96,7 +93,7 @@ function queryMatch(data, query) {
 							{ [property]: query[key][property] }
 						);
 				} else {
-					let queryValue = query[key][property];
+					let queryValue = queryEntry[property];
 					if (isValidDate(queryValue) && isValidDate(dataValue)) {
 						queryValue = new Date(queryValue);
 						dataValue = new Date(dataValue);
@@ -127,6 +124,9 @@ function queryMatch(data, query) {
 							queryStatus = dataValue >= queryValue;
 							break;
 						case "$in":
+							queryValue = Array.isArray(queryValue)
+								? queryValue
+								: [queryValue];
 							if (Array.isArray(dataValue)) {
 								queryStatus = dataValue.some((element) =>
 									queryValue.includes(element)
@@ -136,6 +136,9 @@ function queryMatch(data, query) {
 							}
 							break;
 						case "$nin":
+							queryValue = Array.isArray(queryValue)
+								? queryValue
+								: [queryValue];
 							if (Array.isArray(dataValue)) {
 								queryStatus = !dataValue.some((element) =>
 									queryValue.includes(element)

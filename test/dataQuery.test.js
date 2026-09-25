@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { searchData } from '../src/modules/dataQuery.js';
+import { queryData, searchData } from '../src/modules/dataQuery.js';
+
+test('membership operators safely normalize scalar operands', () => {
+    assert.equal(queryData({ _id: 'provider-id' }, { _id: { $in: false } }), false);
+    assert.equal(queryData({ type: 'cloud' }, { type: { $in: 'cloud' } }), true);
+    assert.equal(queryData({ enabled: false }, { enabled: { $in: false } }), true);
+    assert.equal(queryData({ _id: 'provider-id' }, { _id: { $nin: false } }), true);
+    assert.equal(queryData({ enabled: false }, { enabled: { $nin: false } }), false);
+});
+
+test('null and undefined query values compare without throwing', () => {
+    assert.equal(queryData({ value: null }, { value: null }), true);
+    assert.equal(queryData({ value: 'set' }, { value: null }), false);
+    assert.equal(queryData({ value: undefined }, { value: undefined }), true);
+});
 
 for (const value of [123, 0, true, false, 123n, Symbol('example')]) {
     test(`scalar search ${String(value)} behaves like its string form`, () => {
