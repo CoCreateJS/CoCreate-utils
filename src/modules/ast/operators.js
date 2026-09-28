@@ -430,10 +430,12 @@ export const customOperators = new Map(
         $attributes: function (value) {
             return this.element.getAttribute(value);
         },
-        $getAttribute: function (value) {
-            return this.element.getAttribute(value);
+        $undefined: function () {
+            return;
         },
-
+        $null: function () {
+            return null;
+        }
     })
 );
 
@@ -545,6 +547,7 @@ function processValues(elements, operator, args, parent, objectRegistry) {
     let customOp = customOperators.get(operator);
     let results = [];
     let hasValidProperty = customOp ? true : false;
+    const preserveNullish = operator === "$undefined" || operator === "$null";
 
     for (const el of elements) {
         if (!el) continue;
@@ -692,7 +695,7 @@ function processValues(elements, operator, args, parent, objectRegistry) {
             }
         }
 
-        if (rawValue !== undefined && rawValue !== null) {
+        if (preserveNullish || (rawValue !== undefined && rawValue !== null)) {
             results.push(rawValue);
         }
     }
@@ -786,10 +789,15 @@ export function processOperators(element, value, exclude = [], parent, params = 
 
         let resolvedValue = resolveOperator(element, operator, args, parent, params, objectRegistry);
         if (resolvedValue === undefined) {
+            if (operator === "$undefined" && processedValue.trim() === operator)
+                return undefined;
             const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
             unresolvedTokens.set(token, textToReplace);
             processedValue = processedValue.replace(textToReplace, token);
             continue;
+        }
+        if (resolvedValue === null && operator === "$null" && processedValue.trim() === operator) {
+            return null;
         }
         if (resolvedValue instanceof Promise) {
             const paramIndex = params.length;
@@ -826,7 +834,7 @@ export function processOperators(element, value, exclude = [], parent, params = 
 
 export async function processOperatorsAsync(element, value, exclude = [], parent, params = [], objectRegistry = new Map()) {
     let result = processOperators(element, value, exclude, parent, params, objectRegistry);
-    while (typeof result === "object" && result.params) {
+    while (result && typeof result === "object" && result.params) {
         const resolvedParams = await Promise.all(result.params);
         result = processOperators(element, result.value, exclude, parent, resolvedParams, result.objectRegistry || objectRegistry);
     }
