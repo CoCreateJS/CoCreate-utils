@@ -47,7 +47,10 @@ export function parseAttributes(attrString) {
  */
 export function findMatchingEndTag(html, targetTag, searchFromIndex, selfClosingElements = DEFAULT_SELF_CLOSING_ELEMENTS) {
   const cleanHtml = maskComments(html);
-  const tagRegex = new RegExp(`<(/)?\\s*(${targetTag})\\b([^>]*)>`, "gi");
+  const tagRegex = new RegExp(
+    `<(/)?\\s*(${targetTag})\\b((?:"[^"]*"|'[^']*'|[^'">])*)>`,
+    "gi"
+  );
   tagRegex.lastIndex = searchFromIndex;
   const selfClosingSet = selfClosingElements instanceof Set 
     ? selfClosingElements 
@@ -167,7 +170,9 @@ export class HTMLScanner {
       ? new Set(Array.from(selfClosingElements).map(v => String(v).toUpperCase()))
       : this.selfClosingElements;
 
-    const openTagRegex = /<\s*([a-zA-Z0-9-]+)([^>]*?)>/g;
+    // A closing angle bracket inside a quoted attribute value belongs to the
+    // value (for example, `query="form > .field"`), not to the opening tag.
+    const openTagRegex = /<\s*([a-zA-Z0-9-]+)((?:"[^"]*"|'[^']*'|[^'">])*)>/g;
     const result = [];
     let match;
 
