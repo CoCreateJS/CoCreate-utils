@@ -161,9 +161,9 @@ export function queryElements({ element = document, prefix, selector }) {
 					.trim();
 
 				if (operator === "$closest") {
-					let [closest, remaining = ""] = remainingSelector.split(/\s+/, 2);
+					let [closest, remaining] = splitSelector(remainingSelector, /\s/, true);
 					queriedElement = queriedElement.closest(closest);
-					remainingSelector = remaining.trim();
+					remainingSelector = remaining;
 				} else {
 					queriedElement = queryType(queriedElement, operator);
 				}

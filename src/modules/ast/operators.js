@@ -732,7 +732,16 @@ export function unpackTokens(val, registry) {
 
 function resolveOperator(element, operator, args, parent, params, objectRegistry) {
     if (params.some((p) => p instanceof Promise)) return "";
-    if (args && typeof args === "string" && args.includes("$")) {
+    // Query operators receive selector syntax (for example "$closest form input").
+    // Let queryElements interpret its traversal tokens instead of treating
+    // them as nested AST operators.
+    if (
+        operator !== "$query" &&
+        operator !== "$queryAll" &&
+        args &&
+        typeof args === "string" &&
+        args.includes("$")
+    ) {
         args = processOperators(element, args, [], operator, params, objectRegistry);
     }
 
