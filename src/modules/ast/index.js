@@ -22,6 +22,7 @@ export const isomorphicSandbox = {
     parseFloat,
     encodeURIComponent,
     decodeURIComponent,
+    throw: (message) => { throw new Error(String(message)); },
     btoa: (str) => {
         if (typeof btoa === 'function') return btoa(String(str));
         return Buffer.from(String(str)).toString("base64");
