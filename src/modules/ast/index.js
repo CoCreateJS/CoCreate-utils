@@ -1,6 +1,8 @@
 import { getValueFromObject } from "../getValueFromObject.js";
 import { queryElements } from "../queryElements.js";
 import { queryData } from "../dataQuery.js";
+import { browserGlobalsScope } from "./browserGlobals.js";
+import { sharedGlobalsScope } from "./sharedGlobals.js";
 import { 
     processOperators, 
     processOperatorsAsync, 
@@ -9,132 +11,9 @@ import {
     customOperators 
 } from "./operators.js";
 
-export const isomorphicSandbox = {
-    Math,
-    Number,
-    String,
-    Boolean,
-    Date,
-    JSON,
-    Array,
-    Object,
-    parseInt,
-    parseFloat,
-    encodeURIComponent,
-    decodeURIComponent,
-    throw: (message) => { throw new Error(String(message)); },
-    btoa: (str) => {
-        if (typeof btoa === 'function') return btoa(String(str));
-        return Buffer.from(String(str)).toString("base64");
-    },
-    atob: (b64) => {
-        if (typeof atob === 'function') return atob(b64);
-        return Buffer.from(String(b64), "base64").toString("utf-8");
-    },
-    concat: (...args) => args.flat().map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(''),
-    
-    // Core Asynchronous Flow Control Operators
-    await: {
-        all: async (promises) => {
-            if (promises && typeof promises === 'object' && !Array.isArray(promises)) {
-                const keys = Object.keys(promises);
-                const results = await Promise.all(keys.map(key => promises[key]));
-                return Object.fromEntries(keys.map((key, i) => [key, results[i]]));
-            }
-            return Promise.all(Array.isArray(promises) ? promises : [promises]);
-        },
-        any: async (promises) => {
-            if (promises && typeof promises === 'object' && !Array.isArray(promises)) {
-                return Promise.any(Object.values(promises));
-            }
-            return Promise.any(Array.isArray(promises) ? promises : [promises]);
-        },
-        race: async (promises) => {
-            if (promises && typeof promises === 'object' && !Array.isArray(promises)) {
-                return Promise.race(Object.values(promises));
-            }
-            return Promise.race(Array.isArray(promises) ? promises : [promises]);
-        },
-        allSettled: async (promises) => {
-            if (promises && typeof promises === 'object' && !Array.isArray(promises)) {
-                const keys = Object.keys(promises);
-                const results = await Promise.allSettled(keys.map(key => promises[key]));
-                return Object.fromEntries(keys.map((key, i) => [key, results[i]]));
-            }
-            return Promise.allSettled(Array.isArray(promises) ? promises : [promises]);
-        },
-        delay: (ms) => new Promise(resolve => setTimeout(resolve, Number(ms) || 0))
-    }
-};
-
-const BrowserGlobals = {
-    get $organization_id() { return typeof localStorage !== 'undefined' ? localStorage.getItem("organization_id") : ""; },
-    get $user_id() { return typeof localStorage !== 'undefined' ? localStorage.getItem("user_id") : ""; },
-    get $client_id() { return typeof localStorage !== 'undefined' ? localStorage.getItem("clientId") : ""; },
-    get $session_id() { return typeof localStorage !== 'undefined' ? localStorage.getItem("session_id") : ""; },
-    get $innerWidth() { return typeof window !== 'undefined' ? window.innerWidth : 0; },
-    get $innerHeight() { return typeof window !== 'undefined' ? window.innerHeight : 0; },
-    get $href() { return typeof window !== 'undefined' ? window.location.href.replace(/\/$/, "") : ""; },
-    get $origin() { return typeof window !== 'undefined' ? window.location.origin : ""; },
-    get $protocol() { return typeof window !== 'undefined' ? window.location.protocol : ""; },
-    get $hostname() { return typeof window !== 'undefined' ? window.location.hostname : ""; },
-    get $host() { return typeof window !== 'undefined' ? window.location.host : ""; },
-    get $port() { return typeof window !== 'undefined' ? window.location.port : ""; },
-    get $pathname() { return typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, "") : ""; },
-    get $hash() { return typeof window !== 'undefined' ? window.location.hash : ""; },
-    get $subdomain() {
-        if (typeof window === 'undefined') return "";
-        const parts = window.location.hostname.split('.');
-        return parts.length > 2 ? parts[0] : "";
-    },
-    get $relativePath() {
-        if (typeof window === 'undefined') return "./";
-        const currentPath = window.location.pathname.replace(/\/[^\/]*$/, ""); 
-        const depth = currentPath.split("/").filter(Boolean).length;
-        return depth > 0 ? "../".repeat(depth) : "./";
-    },
-    get $path() {
-        if (typeof window === 'undefined') return "";
-        let path = window.location.pathname;
-        if (path.split("/").pop().includes(".")) path = path.replace(/\/[^\/]+$/, "/");
-        return path === "/" ? "" : path;
-    },
-    $parse: (value = "") => {
-        try { return JSON.parse(value); } catch (e) { return value; }
-    },
-    $query: function(selector) {
-        if (typeof document === 'undefined') return undefined;
-        let element = this?.element || null;
-        if (typeof selector === 'string') {
-            selector = selector.trim().replace(/^['"]|['']$/g, '');
-        }
-        try {
-            const results = queryElements({ element, selector });
-            return results && results.length > 0 ? results[0] : undefined;
-        } catch (error) {
-            console.warn(`[AST Engine] Invalid $query selector => "${selector}"`, error);
-            return undefined;
-        }
-    },
-    $queryAll: function(selector) {
-        if (typeof document === 'undefined') return [];
-        let element = this?.element || null;
-        if (typeof selector === 'string') {
-            selector = selector.trim().replace(/^['"]|['']$/g, '');
-            if (selector.includes('$document')) return [];
-        }
-        try {
-            const results = queryElements({ element, selector });
-            return results ? Array.from(results) : [];
-        } catch (error) {
-            console.warn(`[AST Engine] Invalid $queryAll selector => "${selector}"`, error);
-            return [];
-        }
-    }
-};
-
 const isBrowser = typeof window !== 'undefined';
-let baseSandboxScope = isBrowser ? Object.setPrototypeOf(BrowserGlobals, isomorphicSandbox) : isomorphicSandbox;
+export const isomorphicSandbox = sharedGlobalsScope;
+let baseSandboxScope = isBrowser ? Object.setPrototypeOf(browserGlobalsScope, sharedGlobalsScope) : sharedGlobalsScope;
 
 const conditionalOperators = new Set([
     "$eq",
@@ -382,11 +261,6 @@ function parseConditionalValue(value, evaluate) {
     if (value === "$null") return null;
     if (value === "$undefined") return undefined;
     if (value.startsWith("$")) return evaluate(value);
-    if (value === "true") return true;
-    if (value === "false") return false;
-    if (value === "null") return null;
-    if (value === "undefined") return undefined;
-    if (/^-?(?:\d+\.?\d*|\.\d+)$/.test(value)) return Number(value);
     return value;
 }
 
@@ -498,6 +372,7 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
         if (!(sandbox instanceof Map)) {
             const activeScope = Object.create(baseSandboxScope);
             Object.assign(activeScope, sandbox || {});
+            if (node && activeScope.element === undefined) activeScope.element = node;
             sandbox = activeScope;
         }
         registry = sandbox instanceof Map ? sandbox : new Map(Object.entries(sandbox));
@@ -716,6 +591,7 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
         if (!(sandbox instanceof Map)) {
             const activeScope = Object.create(baseSandboxScope);
             Object.assign(activeScope, sandbox || {});
+            if (node && activeScope.element === undefined) activeScope.element = node;
             sandbox = activeScope;
         }
         registry = sandbox instanceof Map ? sandbox : new Map(Object.entries(sandbox));

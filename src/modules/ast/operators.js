@@ -19,7 +19,10 @@
 import { getValueFromObject } from "../getValueFromObject.js";
 import { queryElements } from "../queryElements.js";
 import { ObjectId } from "../ObjectId.js";
-import { uuid } from "../uuid.js";
+import { browserGlobalOperators } from "./browserGlobals.js";
+import { sharedGlobalOperators } from "./sharedGlobals.js";
+
+const isBrowser = typeof window !== "undefined";
 
 // Late-binding references dynamically set at boot time to decouple circular import loops
 let astSyncRef = null;
@@ -28,6 +31,17 @@ let astAsyncRef = null;
 export function setASTEvaluators(syncFn, asyncFn) {
     astSyncRef = syncFn;
     astAsyncRef = asyncFn;
+}
+
+function parseASTExpression(expression) {
+    if (typeof expression !== "string") return expression;
+
+    try {
+        return JSON.parse(expression);
+    } catch (error) {
+        console.warn("[Operator Engine] Invalid JSON passed to $ast.", error);
+        return "";
+    }
 }
 
 const mathConstants = { PI: Math.PI, E: Math.E };
@@ -287,80 +301,11 @@ export function safeParse(expression, registry = new Map()) {
     }
 }
 
-export const customOperators = new Map(
-    Object.entries({
-        $organization_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("organization_id") : "",
-        $user_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("user_id") : "",
-        $client_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("clientId") : "",
-        $session_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("session_id") : "",
-        $this: function () { return this.element; },
-        $value: function () {
-            if (!this.element) return "";
-            if (typeof this.element.getValueSync === "function") {
-                return this.element.getValueSync();
-            }
-            return typeof this.element.getValue === "function"
-                ? this.element.getValue()
-                : "";
-        },
-        $innerWidth: () => typeof window !== 'undefined' ? window.innerWidth : 0,
-        $innerHeight: () => typeof window !== 'undefined' ? window.innerHeight : 0,
-        $href: () => typeof window !== 'undefined' ? window.location.href.replace(/\/$/, "") : "",
-        $origin: () => typeof window !== 'undefined' ? window.location.origin : "",
-        $protocol: () => typeof window !== 'undefined' ? window.location.protocol : "",
-        $hostname: () => typeof window !== 'undefined' ? window.location.hostname : "",
-        $host: () => typeof window !== 'undefined' ? window.location.host : "",
-        $port: () => typeof window !== 'undefined' ? window.location.port : "",
-        $pathname: () => typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, "") : "",
-        $hash: () => typeof window !== 'undefined' ? window.location.hash : "",
-        $subdomain: () => {
-            if (typeof window === 'undefined') return "";
-            const parts = window.location.hostname.split('.');
-            return parts.length > 2 ? parts[0] : "";
-        },
-        $object_id: () => ObjectId().toString(),
+export const customOperators = new Map([
+	...sharedGlobalOperators,
+	...(isBrowser ? browserGlobalOperators : []),
+    ...Object.entries({
         "ObjectId()": () => ObjectId().toString(),
-
-        $query: function (selector) {
-            let element = this.element;
-            if (typeof selector === 'string') {
-                selector = selector.trim();
-                if ((selector.startsWith("'") && selector.endsWith("'")) ||
-                    (selector.startsWith('"') && selector.endsWith('"'))) {
-                    selector = selector.slice(1, -1);
-                }
-            }
-            try {
-                let results = queryElements({ element, selector });
-                if (!results || results.length === 0) return undefined;
-                return results[0];
-            } catch (error) {
-                console.warn(`Operator Engine: Invalid $query selector => "${selector}"`, error);
-                return undefined;
-            }
-        },
-        $queryAll: function (selector) {
-            let element = this.element;
-            if (typeof selector === 'string') {
-                selector = selector.trim();
-                if ((selector.startsWith("'") && selector.endsWith("'")) ||
-                    (selector.startsWith('"') && selector.endsWith('"'))) {
-                    selector = selector.slice(1, -1);
-                }
-                if (selector.includes('$document')) return [];
-            }
-            try {
-                let results = queryElements({ element, selector });
-                if (!results || results.length === 0) return [];
-                return Array.from(results);
-            } catch (error) {
-                console.warn(`Operator Engine: Invalid $queryAll selector => "${selector}"`, error);
-                return [];
-            }
-        },
-        $eval: function (expression) {
-            return safeParse(expression, this.registry);
-        },
         "$": function (expression) {
             return safeParse(expression, this.registry);
         },
@@ -370,7 +315,7 @@ export const customOperators = new Map(
                 return expression;
             }
             return astSyncRef({
-                executeAST: expression,
+                executeAST: parseASTExpression(expression),
                 node: this.element,
                 registry: this.registry
             });
@@ -381,62 +326,17 @@ export const customOperators = new Map(
                 return expression;
             }
             return await astAsyncRef({
-                executeAST: expression,
+                executeAST: parseASTExpression(expression),
                 node: this.element,
                 registry: this.registry
             });
-        },
-        $relativePath: () => {
-            if (typeof window === 'undefined') return "./";
-            let currentPath = window.location.pathname.replace(/\/[^\/]*$/, "");
-            let depth = currentPath.split("/").filter(Boolean).length;
-            return depth > 0 ? "../".repeat(depth) : "./";
-        },
-        $path: () => {
-            if (typeof window === 'undefined') return "";
-            let path = window.location.pathname;
-            if (path.split("/").pop().includes(".")) path = path.replace(/\/[^\/]+$/, "/");
-            return path === "/" ? "" : path;
         },
         $param: function (...args) { return args.length === 1 ? args[0] : args; },
         $getObjectValue: function (obj, key) {
             return getValueFromObject(obj, key);
         },
-        $setValue: function (...args) {
-            return this.element && typeof this.element.setValue === 'function' ? this.element.setValue(...args) || "" : "";
-        },
-        $true: () => true,
-        $false: () => false,
-        $parse: function (value = "") {
-            try { return JSON.parse(value); } catch (e) { return value; }
-        },
-        $numberFormat: function () {
-            let args = Array.from(arguments);
-            const locale = args[0] || undefined;
-            const options = args[1] || {};
-            const numCandidate = args[2] !== undefined ? args[2] : args[0];
-            let number = parseFloat(numCandidate);
-            if (isNaN(number)) return String(numCandidate ?? "");
-            return new Intl.NumberFormat(locale, options).format(number);
-        },
-        $uuid: function (prefix) { return uuid(prefix) || ""; },
-
-        $add: function (value) {
-            return Array.isArray(value) ? value.flat().reduce((a, b) => Number(a) + Number(b), 0) : Number(value) || 0;
-        },
-        $concat: function (value) {
-            return Array.isArray(value) ? value.flat().map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join('') : String(value ?? "");
-        },
-        $attributes: function (value) {
-            return this.element.getAttribute(value);
-        },
-        $undefined: function () {
-            return;
-        },
-        $null: function () {
-            return null;
-        }
     })
+]
 );
 
 const isConstructor = (func, name) => {
