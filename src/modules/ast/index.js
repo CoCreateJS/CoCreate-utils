@@ -383,7 +383,7 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
         const scoped = resolveScopedPath(targetNode, registry, sandbox);
         if (scoped.found) return scoped.value;
 
-        if (targetNode.includes("$") || targetNode.includes("ObjectId()")) {
+        if (targetNode.includes("$") || targetNode.includes("ObjectId()") || targetNode.includes("`")) {
             let resolved = processOperators(node || null, targetNode, [], null, [], registry);
             return unpackTokens(resolved, registry);
         }
@@ -602,7 +602,7 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
         const scoped = resolveScopedPath(targetNode, registry, sandbox);
         if (scoped.found) return scoped.value;
 
-        if (targetNode.includes("$") || targetNode.includes("ObjectId()")) {
+        if (targetNode.includes("$") || targetNode.includes("ObjectId()") || targetNode.includes("`")) {
             let resolved = await processOperatorsAsync(node || null, targetNode, [], null, [], registry);
             return unpackTokens(resolved, registry);
         }

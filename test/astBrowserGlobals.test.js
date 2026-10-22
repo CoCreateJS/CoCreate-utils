@@ -161,8 +161,8 @@ test("OperatorJS does not execute JavaScript function blocks in safeParse", () =
 	}
 });
 
-test("OperatorJS preserves a quoted value inside a safeParse ternary", () => {
-	const expression = "$('\u0024value' === 'true' ? 'Enabled' : 'Disabled')";
+test("OperatorJS converts a backtick value to a string inside a safeParse ternary", () => {
+	const expression = "$(`\u0024value` === 'true' ? 'Enabled' : 'Disabled')";
 
 	for (const [value, expected] of [["true", "Enabled"], ["false", "Disabled"]]) {
 		const element = createElement(value);

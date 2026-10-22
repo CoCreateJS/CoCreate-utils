@@ -19,8 +19,8 @@
 import { getValueFromObject } from "../getValueFromObject.js";
 import { queryElements } from "../queryElements.js";
 import { ObjectId } from "../ObjectId.js";
-import { browserGlobalOperators } from "./browserGlobals.js";
-import { sharedGlobalOperators } from "./sharedGlobals.js";
+import { browserGlobalOperators, browserGlobalsScope } from "./browserGlobals.js";
+import { sharedGlobalOperators, sharedGlobalsScope } from "./sharedGlobals.js";
 
 const isBrowser = typeof window !== "undefined";
 
@@ -377,6 +377,34 @@ const findInnermostOperator = (expression) => {
         if (char === "'" && !inDQ) inSQ = !inSQ;
         if (inSQ || inDQ) continue;
 
+        if (char === "`") {
+            let layers = 1;
+            while (expression[i + layers] === "`") layers++;
+            let delimiter = "`".repeat(layers);
+            let end = expression.indexOf(delimiter, i + layers);
+            // Two adjacent backticks can also represent an empty string.
+            if (end === -1 && layers > 1) {
+                layers = 1;
+                delimiter = "`";
+                end = i + 1;
+            }
+            while (end !== -1) {
+                let escapes = 0;
+                for (let j = end - 1; j >= 0 && expression[j] === "\\"; j--) escapes++;
+                if (escapes % 2 === 0) break;
+                end = expression.indexOf(delimiter, end + delimiter.length);
+            }
+            if (end !== -1) {
+                return {
+                    stringLiteral: true,
+                    layers,
+                    start: i,
+                    args: expression.slice(i + layers, end),
+                    fullMatch: expression.slice(i, end + layers)
+                };
+            }
+        }
+
         if (char === '(') {
             stack.push(i);
         } else if (char === ')') {
@@ -421,6 +449,7 @@ const findInnermostOperator = (expression) => {
 
                 return {
                     operator: opName,
+                    start: fullMatchStart,
                     args: insideParens,
                     fullMatch: expression.substring(fullMatchStart, p.end + 1),
                     rawContent: expression.substring(fullMatchStart, p.end + 1)
@@ -433,7 +462,11 @@ const findInnermostOperator = (expression) => {
     let bareMatch;
     let bareCandidates = [];
 
-    while ((bareMatch = bareRegex.exec(expression)) !== null) {
+    const unquotedExpression = expression.replace(
+        /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g,
+        literal => " ".repeat(literal.length)
+    );
+    while ((bareMatch = bareRegex.exec(unquotedExpression)) !== null) {
         let possibleOp = bareMatch[1];
         let opName = possibleOp === 'ObjectId' ? 'ObjectId()' : possibleOp;
         let remainder = expression.substring(bareMatch.index + bareMatch[0].length);
@@ -481,7 +514,10 @@ function processValues(elements, operator, args, parent, objectRegistry) {
         const originalWasArray = Array.isArray(args);
         const hasArgs = originalWasArray || args !== undefined;
 
-        if (originalWasArray) {
+        if (operator === "$" && typeof args === "string") {
+            // safeParse consumes the expression, including its string delimiters.
+            preparedArgs = [args];
+        } else if (originalWasArray) {
             preparedArgs = Array.from(args);
         } else if (typeof args === "string") {
             if (args === "") {
@@ -680,44 +716,53 @@ function resolveOperator(element, operator, args, parent, params, objectRegistry
     }
 
     let value = processValues(targetElements, operator, args, parent, objectRegistry);
-    if (value && typeof value === "string" && value.includes("$")) {
-        value = processOperators(element, value, [], parent, params, objectRegistry);
-    }
     return value;
 }
 
 export function processOperators(element, value, exclude = [], parent, params = [], objectRegistry = new Map()) {
-    if (typeof value !== "string" || (!value.includes("$") && !value.includes("ObjectId()"))) return value;
+    if (typeof value !== "string" || (!value.includes("$") && !value.includes("ObjectId()") && !value.includes("`"))) return value;
     let processedValue = value, hasPromise = false, unresolvedTokens = new Map();
 
-    while (processedValue.includes("$") || processedValue.includes("ObjectId()")) {
-        const paramMatch = processedValue.match(/^\$$PARAM_(\d+)\$\$/);
-        if (paramMatch && Array.isArray(params) && params.length > 0) {
-            const index = parseInt(paramMatch[1], 10);
-            if (index < params.length) {
-                processedValue = processedValue.replace(paramMatch[0], params[index]);
-                continue;
-            }
-        }
-
-        const { operator, args, rawContent, fullMatch } = findInnermostOperator(processedValue);
-        if (!operator || (operator === "$param" && !args)) break;
+    while (typeof processedValue === "string" && (processedValue.includes("$") || processedValue.includes("ObjectId()") || processedValue.includes("`"))) {
+        const { operator, args, rawContent, fullMatch, stringLiteral, layers, start } = findInnermostOperator(processedValue);
+        if ((!operator && !stringLiteral) || (operator === "$param" && !args)) break;
 
         const textToReplace = fullMatch || rawContent;
+        const replaceMatch = replacement =>
+            processedValue.slice(0, start) + replacement + processedValue.slice(start + textToReplace.length);
         if (exclude.includes(operator)) {
             const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
             unresolvedTokens.set(token, textToReplace);
-            processedValue = processedValue.replace(textToReplace, token);
+            processedValue = replaceMatch(token);
             continue;
         }
 
-        let resolvedValue = resolveOperator(element, operator, args, parent, params, objectRegistry);
+        let resolvedValue;
+        if (stringLiteral && layers > 1) {
+            const delimiter = "`".repeat(layers - 1);
+            resolvedValue = delimiter + args + delimiter;
+        } else if (stringLiteral) {
+            const result = astSyncRef
+                ? astSyncRef({
+                    executeAST: args,
+                    node: element,
+                    registry: objectRegistry,
+                    sandbox: Object.assign(
+                        Object.create(isBrowser ? browserGlobalsScope : sharedGlobalsScope),
+                        { element }
+                    )
+                })
+                : processOperators(element, args, exclude, null, params, objectRegistry);
+            resolvedValue = result instanceof Promise ? result.then(String) : String(result);
+        } else {
+            resolvedValue = resolveOperator(element, operator, args, parent, params, objectRegistry);
+        }
         if (resolvedValue === undefined) {
             if (operator === "$undefined" && processedValue.trim() === operator)
                 return undefined;
             const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
             unresolvedTokens.set(token, textToReplace);
-            processedValue = processedValue.replace(textToReplace, token);
+            processedValue = replaceMatch(token);
             continue;
         }
         if (resolvedValue === null && operator === "$null" && processedValue.trim() === operator) {
@@ -726,7 +771,7 @@ export function processOperators(element, value, exclude = [], parent, params = 
         if (resolvedValue instanceof Promise) {
             const paramIndex = params.length;
             params.push(resolvedValue);
-            processedValue = processedValue.replace(textToReplace, `$$PARAM_${paramIndex}$$`);
+            processedValue = replaceMatch(`$$PARAM_${paramIndex}$$`);
             hasPromise = true;
             break;
         }
@@ -734,14 +779,14 @@ export function processOperators(element, value, exclude = [], parent, params = 
 
         let replacement = "";
         if (operator === "$param") params.push(resolvedValue);
-        else if (resolvedValue !== null && (typeof resolvedValue === "object" || typeof resolvedValue === "function")) {
+        else if (resolvedValue !== null && (typeof resolvedValue === "object" || typeof resolvedValue === "function" || typeof resolvedValue === "string")) {
             const token = `__OBJ_${objectRegistry.size}__`;
             objectRegistry.set(token, resolvedValue);
             replacement = token;
         } else replacement = resolvedValue ?? "";
 
         if (processedValue === textToReplace) { processedValue = replacement; break; }
-        processedValue = processedValue.replace(textToReplace, replacement);
+        processedValue = replaceMatch(replacement);
     }
 
     if (typeof processedValue === "string") {
@@ -749,7 +794,7 @@ export function processOperators(element, value, exclude = [], parent, params = 
         for (const token of keys) {
             processedValue = processedValue.replaceAll(token, unresolvedTokens.get(token));
         }
-        processedValue = unpackTokens(processedValue, objectRegistry);
+        if (!hasPromise && !parent) processedValue = unpackTokens(processedValue, objectRegistry);
     }
 
     if (hasPromise) return { value: processedValue, params, objectRegistry };
@@ -760,7 +805,13 @@ export async function processOperatorsAsync(element, value, exclude = [], parent
     let result = processOperators(element, value, exclude, parent, params, objectRegistry);
     while (result && typeof result === "object" && result.params) {
         const resolvedParams = await Promise.all(result.params);
-        result = processOperators(element, result.value, exclude, parent, resolvedParams, result.objectRegistry || objectRegistry);
+        objectRegistry = result.objectRegistry || objectRegistry;
+        const resumedValue = result.value.replace(/\$\$PARAM_(\d+)\$\$/g, (_, index) => {
+            const token = `__OBJ_${objectRegistry.size}__`;
+            objectRegistry.set(token, resolvedParams[Number(index)]);
+            return token;
+        });
+        result = processOperators(element, resumedValue, exclude, parent, [], objectRegistry);
     }
-    return result;
+    return parent ? result : unpackTokens(result, objectRegistry);
 }
