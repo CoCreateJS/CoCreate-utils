@@ -161,6 +161,16 @@ test("OperatorJS does not execute JavaScript function blocks in safeParse", () =
 	}
 });
 
+test("OperatorJS preserves a quoted value inside a safeParse ternary", () => {
+	const expression = "$('\u0024value' === 'true' ? 'Enabled' : 'Disabled')";
+
+	for (const [value, expected] of [["true", "Enabled"], ["false", "Disabled"]]) {
+		const element = createElement(value);
+		const sandbox = { $this: element };
+		assert.equal(astSync({ executeAST: expression, node: element, sandbox }), expected);
+	}
+});
+
 test("AST conditional mapping works with an injected sandbox value", async () => {
     const testingLabel = {
         $if: {

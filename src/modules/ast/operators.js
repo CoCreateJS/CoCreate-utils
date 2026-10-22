@@ -87,6 +87,21 @@ function unref(val) {
     return val instanceof Ref ? val.get() : val;
 }
 
+function isQuotedStringLiteral(value) {
+    const quote = value[0];
+    if ((quote !== "'" && quote !== '"') || value.at(-1) !== quote) return false;
+
+    for (let i = 1; i < value.length - 1; i++) {
+        if (value[i] === "\\") {
+            i++;
+        } else if (value[i] === quote) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 export function safeParse(expression, registry = new Map()) {
     if (typeof expression !== "string") return expression;
 
@@ -513,7 +528,7 @@ function processValues(elements, operator, args, parent, objectRegistry) {
                     if (arg === "null") return null;
                     if (arg === "undefined") return undefined;
 
-                    if ((arg.startsWith("'") && arg.endsWith("'")) || (arg.startsWith('"') && arg.endsWith('"'))) {
+                    if (isQuotedStringLiteral(arg)) {
                         let unquoted = arg.slice(1, -1);
                         if (unquoted.includes("__OBJ_")) {
                             return unquoted.replace(/__OBJ_\d+__/g, (match) => {
