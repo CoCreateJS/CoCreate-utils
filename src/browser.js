@@ -30,6 +30,7 @@ export { searchParamsToObject } from "./modules/searchParamsToObject.js";
 export { dotNotationToObject } from "./modules/dotNotationToObject.js";
 export { objectToDotNotation } from "./modules/objectToDotNotation.js";
 export { getValueFromObject } from "./modules/getValueFromObject.js";
+export { resolveProperty } from "./modules/resolveProperty.js";
 export { createUpdate } from "./modules/createUpdate.js";
 export { domParser } from "./modules/domParser.js";
 export { parseTextToHtml } from "./modules/parseTextToHtml.js";
@@ -56,6 +57,7 @@ import { searchParamsToObject } from "./modules/searchParamsToObject.js";
 import { dotNotationToObject } from "./modules/dotNotationToObject.js";
 import { objectToDotNotation } from "./modules/objectToDotNotation.js";
 import { getValueFromObject } from "./modules/getValueFromObject.js";
+import { resolveProperty } from "./modules/resolveProperty.js";
 import { createUpdate } from "./modules/createUpdate.js";
 import { domParser } from "./modules/domParser.js";
 import { parseTextToHtml } from "./modules/parseTextToHtml.js";
@@ -85,6 +87,7 @@ const utils = {
     dotNotationToObject,
     objectToDotNotation,
     getValueFromObject,
+    resolveProperty,
     objectToSearchParams,
     searchParamsToObject,
     domParser,

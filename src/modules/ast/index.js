@@ -1,3 +1,4 @@
+import { dotNotationToObject } from "../dotNotationToObject.js";
 import { getValueFromObject } from "../getValueFromObject.js";
 import { queryElements } from "../queryElements.js";
 import { queryData } from "../dataQuery.js";
@@ -97,10 +98,16 @@ function resolveOperator(expression, registry, sandbox) {
         return { found: false, value: undefined };
     }
 
+    // Keep the root reference so the shared dot-notation writer can update
+    // sandbox or registry objects, including paths whose parents do not exist.
+    const assignmentScope = path.length && value !== null &&
+        (typeof value === "object" || typeof value === "function")
+        ? { [root]: value }
+        : undefined;
     let owner = null;
     for (const property of path) {
         if (value === null || value === undefined || !(property in Object(value))) {
-            return { found: false, value: undefined };
+            return { found: false, value: undefined, assignmentScope };
         }
         owner = value;
         value = value[property];
@@ -110,7 +117,7 @@ function resolveOperator(expression, registry, sandbox) {
         value = value.bind(owner);
     }
 
-    return { found: true, value };
+    return { found: true, value, assignmentScope };
 }
 
 function getForDefinition(definition) {
@@ -490,8 +497,9 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
 
             const resolvedOperator = resolveOperator(key, registry, sandbox);
             let opFunc = resolvedOperator.value;
+            const { assignmentScope } = resolvedOperator;
 
-            if (opFunc !== undefined) {
+            if (opFunc !== undefined || assignmentScope) {
                 const { nestedSandbox, nestedRegistry } = createNestedScope(sandbox, registry);
                 const evaluatedParam = astSync({
                     executeAST: targetNode[key],
@@ -499,6 +507,10 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
                     node,
                     registry: nestedRegistry
                 });
+                if (assignmentScope && typeof opFunc !== "function") {
+                    dotNotationToObject({ [key]: evaluatedParam }, assignmentScope);
+                    return evaluatedParam;
+                }
                 let opCtx = { element: node, registry };
                 if (typeof opFunc === "function") {
                     const args = Array.isArray(evaluatedParam) ? evaluatedParam : [evaluatedParam];
@@ -534,7 +546,10 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
 
             if (key !== "$return" && key.startsWith("$")) {
                 const operator = resolveOperator(key, registry, sandbox);
-                if (typeof operator.value === "function") {
+                if (
+                    typeof operator.value === "function" ||
+                    operator.assignmentScope
+                ) {
                     resolvedObject[key] = astSync({
                         executeAST: { [key]: targetNode[key] },
                         sandbox,
@@ -738,8 +753,9 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
 
             const resolvedOperator = resolveOperator(key, registry, sandbox);
             let opFunc = resolvedOperator.value;
+            const { assignmentScope } = resolvedOperator;
 
-            if (opFunc !== undefined) {
+            if (opFunc !== undefined || assignmentScope) {
                 const { nestedSandbox, nestedRegistry } = createNestedScope(sandbox, registry);
                 const evaluatedParam = await astAsync({
                     executeAST: targetNode[key],
@@ -747,6 +763,10 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
                     node,
                     registry: nestedRegistry
                 });
+                if (assignmentScope && typeof opFunc !== "function") {
+                    dotNotationToObject({ [key]: evaluatedParam }, assignmentScope);
+                    return evaluatedParam;
+                }
                 let opCtx = { element: node, registry };
                 if (typeof opFunc === "function") {
                     const args = Array.isArray(evaluatedParam) ? evaluatedParam : [evaluatedParam];
@@ -782,7 +802,10 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
 
             if (key !== "$return" && key.startsWith("$")) {
                 const operator = resolveOperator(key, registry, sandbox);
-                if (typeof operator.value === "function") {
+                if (
+                    typeof operator.value === "function" ||
+                    operator.assignmentScope
+                ) {
                     resolvedObject[key] = await astAsync({
                         executeAST: { [key]: targetNode[key] },
                         sandbox,

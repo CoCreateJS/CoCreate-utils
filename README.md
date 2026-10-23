@@ -245,3 +245,47 @@ test. Whitespace after the attached selector starts the remaining query;
 whitespace inside quoted attributes or parentheses remains part of the test.
 `$this` is supported only at the beginning of a branch. Existing traversal
 operators and descendant selectors continue normally after it.
+
+### Resolve property names
+
+```js
+import { resolveProperty } from "@cocreate/utils";
+
+const key = resolveProperty(element, "textcontent"); // "textContent"
+if (key !== undefined) element[key] = "Updated";
+```
+
+`resolveProperty(object, name)` returns the original string key matching a name
+without case sensitivity, or `undefined` when no match exists. It searches own
+and inherited properties, including non-enumerable properties, without reading
+getters. Distinct keys must be unique ignoring case: `myMethod` and `mymethod`
+on the same object or its prototype chain cause a `TypeError`, even if one is
+an exact match. Overrides using the same spelling are allowed. The caller
+chooses whether to read, assign, or invoke the resolved member.
+
+### Assign nested AST results
+
+A dotted operator key identifies a property on an existing scoped object. When
+that member is not a function, AST evaluates the nested value, assigns the
+result to the property, and returns that result:
+
+```js
+await astAsync({
+    node: element,
+    sandbox: { $this: element, $ExamplePlugin: ExamplePlugin },
+    executeAST: {
+        "$this.myInstance": { "$ExamplePlugin": ["$this", {}] }
+    }
+});
+```
+
+This works in both `astSync` and `astAsync`, including multiple sibling keys,
+nested paths, numeric array indices, and `items[]` appends. AST resolves the
+root from its sandbox or registry and delegates writes to `dotNotationToObject`.
+The root object must exist; missing parent objects are created by the shared
+helper. Its conventions apply: `undefined` deletes a property, and assigning
+`undefined` to an indexed array entry splices that entry out.
+Existing callable members retain method invocation semantics. A string such as
+`"$this.myInstance"` still reads a value; ordinary keys still store values in
+the AST result and scope. Returned results are not automatically assigned to
+the host element by the plugin loader.
