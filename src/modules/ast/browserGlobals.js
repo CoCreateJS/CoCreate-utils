@@ -4,20 +4,26 @@ function getElement(context) {
     return context?.element || context?.$this || null;
 }
 
+function setScopedValue(context, name, value) {
+    Object.defineProperty(context, name, {
+        value,
+        writable: true,
+        configurable: true,
+        enumerable: true
+    });
+}
+
 const browserGlobals = {
+    get $window() { return typeof window !== "undefined" ? window : undefined; },
+    set $window(value) { setScopedValue(this, "$window", value); },
+    get $CoCreate() { return typeof window !== "undefined" ? window.CoCreate : undefined; },
+    set $CoCreate(value) { setScopedValue(this, "$CoCreate", value); },
     get $organization_id() { return typeof localStorage !== "undefined" ? localStorage.getItem("organization_id") : ""; },
     get $user_id() { return typeof localStorage !== "undefined" ? localStorage.getItem("user_id") : ""; },
     get $client_id() { return typeof localStorage !== "undefined" ? localStorage.getItem("clientId") : ""; },
     get $session_id() { return typeof localStorage !== "undefined" ? localStorage.getItem("session_id") : ""; },
     get $this() { return getElement(this); },
-    set $this(value) {
-        Object.defineProperty(this, "$this", {
-            value,
-            writable: true,
-            configurable: true,
-            enumerable: true
-        });
-    },
+    set $this(value) { setScopedValue(this, "$this", value); },
     get $value() {
         const element = getElement(this);
         if (!element) return "";

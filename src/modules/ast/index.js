@@ -86,14 +86,14 @@ function resolveOperator(expression, registry, sandbox) {
         value = registry.get(root);
     } else if (registry?.has(unprefixedRoot)) {
         value = registry.get(unprefixedRoot);
-    } else if (customOperators.has(root)) {
-        value = customOperators.get(root);
-    } else if (customOperators.has(unprefixedRoot)) {
-        value = customOperators.get(unprefixedRoot);
     } else if (sandbox && root in Object(sandbox)) {
         value = sandbox[root];
     } else if (sandbox && unprefixedRoot in Object(sandbox)) {
         value = sandbox[unprefixedRoot];
+    } else if (customOperators.has(root)) {
+        value = customOperators.get(root);
+    } else if (customOperators.has(unprefixedRoot)) {
+        value = customOperators.get(unprefixedRoot);
     } else {
         return { found: false, value: undefined };
     }
@@ -189,6 +189,10 @@ function getFunctionDefinition(definition) {
         throw new Error("AST '$function' requires a body.");
     }
 
+    if (Object.prototype.hasOwnProperty.call(definition, "async")) {
+        throw new TypeError("AST '$function.async' is not supported; wrap '$function' in '$async' instead.");
+    }
+
     return { params, body: definition.body, bind: definition.bind };
 }
 
@@ -214,6 +218,40 @@ function createFunctionScope({ sandbox, registry, params, args, thisArg }) {
     });
 
     return { functionSandbox, functionRegistry };
+}
+
+function createASTFunction(expression, { sandbox, node, registry }) {
+    const isAsync = Object.prototype.hasOwnProperty.call(expression, "$async");
+    let functionExpression = expression;
+    if (isAsync) {
+        functionExpression = expression.$async;
+        if (
+            !functionExpression || typeof functionExpression !== "object" ||
+            Array.isArray(functionExpression) || Object.keys(functionExpression).length !== 1 ||
+            !Object.prototype.hasOwnProperty.call(functionExpression, "$function")
+        ) {
+            throw new TypeError("AST '$async' requires a nested '$function' definition.");
+        }
+    }
+
+    const { params, body, bind } = getFunctionDefinition(functionExpression.$function);
+    const evaluate = isAsync ? astAsync : astSync;
+    const execute = (thisArg, args) => {
+        const { functionSandbox, functionRegistry } = createFunctionScope({
+            sandbox, registry, params, args, thisArg
+        });
+        return evaluate({
+            executeAST: body,
+            sandbox: functionSandbox,
+            node,
+            registry: functionRegistry
+        });
+    };
+    const callback = isAsync
+        ? async function (...args) { return execute(this, args); }
+        : function (...args) { return execute(this, args); };
+
+    return { callback, bind };
 }
 
 function isClassLike(func) {
@@ -424,23 +462,8 @@ export function astSync({ executeAST, sandbox, node, registry } = {}) {
             throw new Error("AST '$await' requires astAsync.");
         }
 
-        if (structuralKey === "$function") {
-            const { params, body, bind } = getFunctionDefinition(targetNode.$function);
-            const callback = function (...args) {
-                const { functionSandbox, functionRegistry } = createFunctionScope({
-                    sandbox,
-                    registry,
-                    params,
-                    args,
-                    thisArg: this
-                });
-                return astSync({
-                    executeAST: body,
-                    sandbox: functionSandbox,
-                    node,
-                    registry: functionRegistry
-                });
-            };
+        if (structuralKey === "$function" || structuralKey === "$async") {
+            const { callback, bind } = createASTFunction(targetNode, { sandbox, node, registry });
             if (bind === undefined) return callback;
             const thisArg = astSync({ executeAST: bind, sandbox, node, registry });
             return callback.bind(thisArg);
@@ -658,23 +681,8 @@ export async function astAsync({ executeAST, sandbox, node, registry } = {}) {
             });
         }
 
-        if (structuralKey === "$function") {
-            const { params, body, bind } = getFunctionDefinition(targetNode.$function);
-            const callback = function (...args) {
-                const { functionSandbox, functionRegistry } = createFunctionScope({
-                    sandbox,
-                    registry,
-                    params,
-                    args,
-                    thisArg: this
-                });
-                return astAsync({
-                    executeAST: body,
-                    sandbox: functionSandbox,
-                    node,
-                    registry: functionRegistry
-                });
-            };
+        if (structuralKey === "$function" || structuralKey === "$async") {
+            const { callback, bind } = createASTFunction(targetNode, { sandbox, node, registry });
             if (bind === undefined) return callback;
             const thisArg = await astAsync({ executeAST: bind, sandbox, node, registry });
             return callback.bind(thisArg);

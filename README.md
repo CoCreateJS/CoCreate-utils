@@ -289,3 +289,42 @@ Existing callable members retain method invocation semantics. A string such as
 `"$this.myInstance"` still reads a value; ordinary keys still store values in
 the AST result and scope. Returned results are not automatically assigned to
 the host element by the plugin loader.
+
+### Browser globals in AST
+
+In browser evaluations, `$window` reads the browser window and `$CoCreate`
+reads its current `window.CoCreate` namespace. Both support dotted property
+reads, assignment keys, and method calls in `astSync` and `astAsync`:
+
+```js
+astSync({ executeAST: "$window.location.origin" });
+astSync({ executeAST: "$CoCreate" });
+await astAsync({ executeAST: { "$window.exampleSettings": { enabled: true } } });
+```
+
+The globals resolve at evaluation time, so CoCreate may load after AST.
+OperatorJS expressions can also use `$($window.innerWidth)` and
+`$($CoCreate.someProperty)`, or the browser's normal `window` and `CoCreate`
+names inside `$()`.
+
+### Synchronous and asynchronous callbacks
+
+`$function` creates a synchronous callback in both `astSync` and `astAsync`.
+Creating the callback does not execute its body. Wrap it in `$async` to create
+an asynchronous callback whose body uses `astAsync` and returns a Promise:
+
+```json
+{
+    "$async": {
+        "$function": {
+            "params": ["value"],
+            "body": { "$await": "$value" }
+        }
+    }
+}
+```
+
+Both forms preserve the surrounding scope, parameters, and optional `bind`.
+`$await` requires asynchronous evaluation; a synchronous callback rejects it.
+A synchronous callback can still return a Promise directly without awaiting
+it. Async configuration evaluation does not change a callback's declaration.
