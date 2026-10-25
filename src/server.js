@@ -32,7 +32,6 @@ export { objectToDotNotation } from "./modules/objectToDotNotation.js";
 export { getValueFromObject } from "./modules/getValueFromObject.js";
 export { resolveProperty } from "./modules/resolveProperty.js";
 export { createUpdate } from "./modules/createUpdate.js";
-export { domParser } from "./modules/domParser.js";
 export { parseTextToHtml } from "./modules/parseTextToHtml.js";
 export { escapeHtml } from "./modules/escapeHtml.js";
 export { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./modules/dataQuery.js";
@@ -58,7 +57,6 @@ import { objectToDotNotation } from "./modules/objectToDotNotation.js";
 import { getValueFromObject } from "./modules/getValueFromObject.js";
 import { resolveProperty } from "./modules/resolveProperty.js";
 import { createUpdate } from "./modules/createUpdate.js";
-import { domParser } from "./modules/domParser.js";
 import { parseTextToHtml } from "./modules/parseTextToHtml.js";
 import { escapeHtml } from "./modules/escapeHtml.js";
 import { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./modules/dataQuery.js";
@@ -89,7 +87,6 @@ const utils = {
     resolveProperty,
     objectToSearchParams,
     searchParamsToObject,
-    domParser,
     parseTextToHtml,
     escapeHtml,
     queryData,

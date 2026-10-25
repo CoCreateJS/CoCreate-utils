@@ -32,14 +32,12 @@ export { objectToDotNotation } from "./modules/objectToDotNotation.js";
 export { getValueFromObject } from "./modules/getValueFromObject.js";
 export { resolveProperty } from "./modules/resolveProperty.js";
 export { createUpdate } from "./modules/createUpdate.js";
-export { domParser } from "./modules/domParser.js";
 export { parseTextToHtml } from "./modules/parseTextToHtml.js";
 export { escapeHtml } from "./modules/escapeHtml.js";
 export { cssPath } from "./modules/cssPath.js";
 export { queryElements, checkMediaQueries } from "./modules/queryElements.js";
 export { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./modules/dataQuery.js";
 export { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
-export { clickedElement } from "./modules/clickedElement.js";
 export { astSync, astAsync } from "./modules/ast/index.js";
 export { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 
@@ -59,14 +57,12 @@ import { objectToDotNotation } from "./modules/objectToDotNotation.js";
 import { getValueFromObject } from "./modules/getValueFromObject.js";
 import { resolveProperty } from "./modules/resolveProperty.js";
 import { createUpdate } from "./modules/createUpdate.js";
-import { domParser } from "./modules/domParser.js";
 import { parseTextToHtml } from "./modules/parseTextToHtml.js";
 import { escapeHtml } from "./modules/escapeHtml.js";
 import { cssPath } from "./modules/cssPath.js";
 import { queryElements, checkMediaQueries } from "./modules/queryElements.js";
 import { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./modules/dataQuery.js";
 import { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
-import { clickedElement } from "./modules/clickedElement.js";
 import { astSync, astAsync } from "./modules/ast/index.js";
 import { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
 
@@ -90,7 +86,6 @@ const utils = {
     resolveProperty,
     objectToSearchParams,
     searchParamsToObject,
-    domParser,
     parseTextToHtml,
     escapeHtml,
     cssPath,
@@ -105,7 +100,6 @@ const utils = {
     getAttributes,
     setAttributeNames,
     getAttributeNames,
-    clickedElement,
     astSync,
     astAsync,
     processOperators,
