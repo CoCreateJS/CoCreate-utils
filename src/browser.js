@@ -40,6 +40,7 @@ export { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./
 export { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
 export { astSync, astAsync } from "./modules/ast/index.js";
 export { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
+export { hasSelection } from "./modules/selection.js";
 
 import { getClientInfo } from "./modules/getClientInfo.js";
 import { cloudProviders } from "./modules/cloudProviders.js";
@@ -65,6 +66,7 @@ import { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./
 import { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
 import { astSync, astAsync } from "./modules/ast/index.js";
 import { processOperators, processOperatorsAsync } from "./modules/ast/operators.js";
+import { hasSelection } from "./modules/selection.js";
 
 import * as valueHandlers from "./modules/valueHandler.js";
 
@@ -103,7 +105,8 @@ const utils = {
     astSync,
     astAsync,
     processOperators,
-    processOperatorsAsync
+    processOperatorsAsync,
+    hasSelection
 };
 
 export default utils;

@@ -5,6 +5,19 @@ const rect = value => ({
     height: value.height
 });
 
+/** Check whether the document selection intersects an element. */
+export function hasSelection(element) {
+    if (!element || !element.ownerDocument) return false;
+
+    if (["INPUT", "TEXTAREA"].includes(element.tagName))
+        return element.selectionStart !== element.selectionEnd;
+
+    const selection = element.ownerDocument.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return false;
+
+    return selection.getRangeAt(0).intersectsNode(element);
+}
+
 export function getRangeRects(range, caret = range, host) {
     const selection = [...range.getClientRects()].map(rect);
     let position = [...caret.getClientRects()].at(-1);
