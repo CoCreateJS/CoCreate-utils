@@ -85,6 +85,18 @@ const browserGlobals = {
 	$attributes: function (value) {
 		return this.element.getAttribute(value);
 	},
+	$getAttribute: function (name) {
+		return getElement(this)?.getAttribute(name) ?? null;
+	},
+	$hasAttribute: function (name) {
+		return getElement(this)?.hasAttribute(name) ?? false;
+	},
+	$setAttribute: function (name, value) {
+		const element = getElement(this);
+		if (!element) return value;
+		element.setAttribute(name, value);
+		return value;
+	},
 	$setValue: function (...args) {
 		return this.element && typeof this.element.setValue === "function"
 			? this.element.setValue(...args) || ""
