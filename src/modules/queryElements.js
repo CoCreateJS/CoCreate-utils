@@ -5,6 +5,9 @@ const queryTypes = [
 	"$previous",
 	"$document",
 	"$frame",
+	"$contentDocument",
+	"$activeElement",
+	"$clickedElement",
 	"$top"
 ];
 
@@ -50,12 +53,29 @@ function queryType(element, type) {
 
 	switch (type) {
 		case "$top":
-			return window.top.document;
+			return (element.nodeType === 9
+				? element.defaultView
+				: element.ownerDocument?.defaultView
+			)?.top.document;
 		case "$frame":
-			if (element.nodeType === 9) return window.frameElement;
+			if (element.nodeType === 9) return element.defaultView?.frameElement;
 			return element;
+		case "$contentDocument":
+			return element.contentDocument;
+		case "$activeElement": {
+			const doc = element.nodeType === 9 ? element : element.document || element.ownerDocument;
+			return doc?.activeElement;
+		}
+		case "$clickedElement": {
+			if (element.tagName === "IFRAME") {
+				const doc = element.contentDocument;
+				return element.clickedElement ?? doc?.clickedElement;
+			}
+			const doc = element.nodeType === 9 ? element : element.document || element.ownerDocument;
+			return doc?.clickedElement;
+		}
 		case "$document":
-			return element.nodeType === 9 ? element : element.ownerDocument;
+			return element.nodeType === 9 ? element : element.document || element.ownerDocument;
 		case "$closest":
 			return element.nodeType === 9 ? element : element.ownerDocument;
 		case "$parent":
@@ -76,6 +96,8 @@ function queryType(element, type) {
 
 function querySelector(element, selector) {
 	if (!element) return null;
+	// Permit a Window context to query its document when supplied directly.
+	if (element.document) element = element.document;
 	return selector.endsWith("[]")
 		? element.querySelectorAll(selector.slice(0, -2))
 		: element.querySelector(selector);
@@ -115,12 +137,11 @@ export function queryElements({ element = document, prefix, selector }) {
 		let elements = new Set();
 
 		if (!selector && element.nodeType === 1) {
-			let queryName = prefix ? `${prefix}-query` : null;
+			const queryName = prefix ? `${prefix}-query` : null;
 			// Query expressions such as "$closest form" are syntax for this
 			// parser, not values for the AST-aware getAttribute override.
-			if (queryName)
-				selector = element.attributes.getNamedItem(queryName)?.value;
-			if (!selector) return [];
+			if (!queryName || !element.hasAttribute(queryName)) return [];
+			selector = element.attributes.getNamedItem(queryName)?.value;
 		}
 
 		let selectors = splitSelector(selector, /,/);
@@ -177,18 +198,14 @@ export function queryElements({ element = document, prefix, selector }) {
 				queriedElement = querySelector(queriedElement, remainingSelector);
 			}
 
-			if (
-				Array.isArray(queriedElement) ||
-				queriedElement instanceof HTMLCollection ||
-				queriedElement instanceof NodeList
-			) {
-				for (let el of queriedElement) {
-					if (el instanceof Element) {
-						elements.add(el);
-					}
-				}
-			} else if (queriedElement instanceof Element) {
+			// nodeType checks work across iframe realms, where Element, NodeList,
+			// and HTMLCollection constructors differ from the parent window's.
+			if (queriedElement?.nodeType === 1) {
 				elements.add(queriedElement);
+			} else if (queriedElement && typeof queriedElement[Symbol.iterator] === "function") {
+				for (const el of queriedElement) {
+					if (el?.nodeType === 1) elements.add(el);
+				}
 			}
 		}
 

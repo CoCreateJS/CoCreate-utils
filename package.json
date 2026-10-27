@@ -44,6 +44,7 @@
       "node": "./src/server.js",
       "default": "./src/browser.js"
     },
+    "./selection": "./src/modules/selection.js",
     "./browser": "./src/browser.js",
     "./server": "./src/server.js"
   },

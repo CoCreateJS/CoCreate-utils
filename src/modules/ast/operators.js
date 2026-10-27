@@ -19,7 +19,10 @@
 import { getValueFromObject } from "../getValueFromObject.js";
 import { queryElements } from "../queryElements.js";
 import { ObjectId } from "../ObjectId.js";
-import { uuid } from "../uuid.js";
+import { browserGlobalOperators, browserGlobalsScope } from "./browserGlobals.js";
+import { sharedGlobalOperators, sharedGlobalsScope } from "./sharedGlobals.js";
+
+const isBrowser = typeof window !== "undefined";
 
 // Late-binding references dynamically set at boot time to decouple circular import loops
 let astSyncRef = null;
@@ -28,6 +31,17 @@ let astAsyncRef = null;
 export function setASTEvaluators(syncFn, asyncFn) {
     astSyncRef = syncFn;
     astAsyncRef = asyncFn;
+}
+
+function parseASTExpression(expression) {
+    if (typeof expression !== "string") return expression;
+
+    try {
+        return JSON.parse(expression);
+    } catch (error) {
+        console.warn("[Operator Engine] Invalid JSON passed to $ast.", error);
+        return "";
+    }
 }
 
 const mathConstants = { PI: Math.PI, E: Math.E };
@@ -71,6 +85,21 @@ class Ref {
 
 function unref(val) {
     return val instanceof Ref ? val.get() : val;
+}
+
+function isQuotedStringLiteral(value) {
+    const quote = value[0];
+    if ((quote !== "'" && quote !== '"') || value.at(-1) !== quote) return false;
+
+    for (let i = 1; i < value.length - 1; i++) {
+        if (value[i] === "\\") {
+            i++;
+        } else if (value[i] === quote) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 export function safeParse(expression, registry = new Map()) {
@@ -287,80 +316,11 @@ export function safeParse(expression, registry = new Map()) {
     }
 }
 
-export const customOperators = new Map(
-    Object.entries({
-        $organization_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("organization_id") : "",
-        $user_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("user_id") : "",
-        $client_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("clientId") : "",
-        $session_id: () => typeof localStorage !== 'undefined' ? localStorage.getItem("session_id") : "",
-        $this: function () { return this.element; },
-        $value: function () {
-            if (!this.element) return "";
-            if (typeof this.element.getValueSync === "function") {
-                return this.element.getValueSync();
-            }
-            return typeof this.element.getValue === "function"
-                ? this.element.getValue()
-                : "";
-        },
-        $innerWidth: () => typeof window !== 'undefined' ? window.innerWidth : 0,
-        $innerHeight: () => typeof window !== 'undefined' ? window.innerHeight : 0,
-        $href: () => typeof window !== 'undefined' ? window.location.href.replace(/\/$/, "") : "",
-        $origin: () => typeof window !== 'undefined' ? window.location.origin : "",
-        $protocol: () => typeof window !== 'undefined' ? window.location.protocol : "",
-        $hostname: () => typeof window !== 'undefined' ? window.location.hostname : "",
-        $host: () => typeof window !== 'undefined' ? window.location.host : "",
-        $port: () => typeof window !== 'undefined' ? window.location.port : "",
-        $pathname: () => typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, "") : "",
-        $hash: () => typeof window !== 'undefined' ? window.location.hash : "",
-        $subdomain: () => {
-            if (typeof window === 'undefined') return "";
-            const parts = window.location.hostname.split('.');
-            return parts.length > 2 ? parts[0] : "";
-        },
-        $object_id: () => ObjectId().toString(),
+export const customOperators = new Map([
+	...sharedGlobalOperators,
+	...(isBrowser ? browserGlobalOperators : []),
+    ...Object.entries({
         "ObjectId()": () => ObjectId().toString(),
-
-        $query: function (selector) {
-            let element = this.element;
-            if (typeof selector === 'string') {
-                selector = selector.trim();
-                if ((selector.startsWith("'") && selector.endsWith("'")) ||
-                    (selector.startsWith('"') && selector.endsWith('"'))) {
-                    selector = selector.slice(1, -1);
-                }
-            }
-            try {
-                let results = queryElements({ element, selector });
-                if (!results || results.length === 0) return undefined;
-                return results[0];
-            } catch (error) {
-                console.warn(`Operator Engine: Invalid $query selector => "${selector}"`, error);
-                return undefined;
-            }
-        },
-        $queryAll: function (selector) {
-            let element = this.element;
-            if (typeof selector === 'string') {
-                selector = selector.trim();
-                if ((selector.startsWith("'") && selector.endsWith("'")) ||
-                    (selector.startsWith('"') && selector.endsWith('"'))) {
-                    selector = selector.slice(1, -1);
-                }
-                if (selector.includes('$document')) return [];
-            }
-            try {
-                let results = queryElements({ element, selector });
-                if (!results || results.length === 0) return [];
-                return Array.from(results);
-            } catch (error) {
-                console.warn(`Operator Engine: Invalid $queryAll selector => "${selector}"`, error);
-                return [];
-            }
-        },
-        $eval: function (expression) {
-            return safeParse(expression, this.registry);
-        },
         "$": function (expression) {
             return safeParse(expression, this.registry);
         },
@@ -370,7 +330,7 @@ export const customOperators = new Map(
                 return expression;
             }
             return astSyncRef({
-                executeAST: expression,
+                executeAST: parseASTExpression(expression),
                 node: this.element,
                 registry: this.registry
             });
@@ -381,62 +341,17 @@ export const customOperators = new Map(
                 return expression;
             }
             return await astAsyncRef({
-                executeAST: expression,
+                executeAST: parseASTExpression(expression),
                 node: this.element,
                 registry: this.registry
             });
-        },
-        $relativePath: () => {
-            if (typeof window === 'undefined') return "./";
-            let currentPath = window.location.pathname.replace(/\/[^\/]*$/, "");
-            let depth = currentPath.split("/").filter(Boolean).length;
-            return depth > 0 ? "../".repeat(depth) : "./";
-        },
-        $path: () => {
-            if (typeof window === 'undefined') return "";
-            let path = window.location.pathname;
-            if (path.split("/").pop().includes(".")) path = path.replace(/\/[^\/]+$/, "/");
-            return path === "/" ? "" : path;
         },
         $param: function (...args) { return args.length === 1 ? args[0] : args; },
         $getObjectValue: function (obj, key) {
             return getValueFromObject(obj, key);
         },
-        $setValue: function (...args) {
-            return this.element && typeof this.element.setValue === 'function' ? this.element.setValue(...args) || "" : "";
-        },
-        $true: () => true,
-        $false: () => false,
-        $parse: function (value = "") {
-            try { return JSON.parse(value); } catch (e) { return value; }
-        },
-        $numberFormat: function () {
-            let args = Array.from(arguments);
-            const locale = args[0] || undefined;
-            const options = args[1] || {};
-            const numCandidate = args[2] !== undefined ? args[2] : args[0];
-            let number = parseFloat(numCandidate);
-            if (isNaN(number)) return String(numCandidate ?? "");
-            return new Intl.NumberFormat(locale, options).format(number);
-        },
-        $uuid: function (prefix) { return uuid(prefix) || ""; },
-
-        $add: function (value) {
-            return Array.isArray(value) ? value.flat().reduce((a, b) => Number(a) + Number(b), 0) : Number(value) || 0;
-        },
-        $concat: function (value) {
-            return Array.isArray(value) ? value.flat().map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join('') : String(value ?? "");
-        },
-        $attributes: function (value) {
-            return this.element.getAttribute(value);
-        },
-        $undefined: function () {
-            return;
-        },
-        $null: function () {
-            return null;
-        }
     })
+]
 );
 
 const isConstructor = (func, name) => {
@@ -461,6 +376,34 @@ const findInnermostOperator = (expression) => {
         if (char === '"' && !inSQ) inDQ = !inDQ;
         if (char === "'" && !inDQ) inSQ = !inSQ;
         if (inSQ || inDQ) continue;
+
+        if (char === "`") {
+            let layers = 1;
+            while (expression[i + layers] === "`") layers++;
+            let delimiter = "`".repeat(layers);
+            let end = expression.indexOf(delimiter, i + layers);
+            // Two adjacent backticks can also represent an empty string.
+            if (end === -1 && layers > 1) {
+                layers = 1;
+                delimiter = "`";
+                end = i + 1;
+            }
+            while (end !== -1) {
+                let escapes = 0;
+                for (let j = end - 1; j >= 0 && expression[j] === "\\"; j--) escapes++;
+                if (escapes % 2 === 0) break;
+                end = expression.indexOf(delimiter, end + delimiter.length);
+            }
+            if (end !== -1) {
+                return {
+                    stringLiteral: true,
+                    layers,
+                    start: i,
+                    args: expression.slice(i + layers, end),
+                    fullMatch: expression.slice(i, end + layers)
+                };
+            }
+        }
 
         if (char === '(') {
             stack.push(i);
@@ -506,6 +449,7 @@ const findInnermostOperator = (expression) => {
 
                 return {
                     operator: opName,
+                    start: fullMatchStart,
                     args: insideParens,
                     fullMatch: expression.substring(fullMatchStart, p.end + 1),
                     rawContent: expression.substring(fullMatchStart, p.end + 1)
@@ -518,7 +462,11 @@ const findInnermostOperator = (expression) => {
     let bareMatch;
     let bareCandidates = [];
 
-    while ((bareMatch = bareRegex.exec(expression)) !== null) {
+    const unquotedExpression = expression.replace(
+        /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g,
+        literal => " ".repeat(literal.length)
+    );
+    while ((bareMatch = bareRegex.exec(unquotedExpression)) !== null) {
         let possibleOp = bareMatch[1];
         let opName = possibleOp === 'ObjectId' ? 'ObjectId()' : possibleOp;
         let remainder = expression.substring(bareMatch.index + bareMatch[0].length);
@@ -566,7 +514,10 @@ function processValues(elements, operator, args, parent, objectRegistry) {
         const originalWasArray = Array.isArray(args);
         const hasArgs = originalWasArray || args !== undefined;
 
-        if (originalWasArray) {
+        if (operator === "$" && typeof args === "string") {
+            // safeParse consumes the expression, including its string delimiters.
+            preparedArgs = [args];
+        } else if (originalWasArray) {
             preparedArgs = Array.from(args);
         } else if (typeof args === "string") {
             if (args === "") {
@@ -613,7 +564,7 @@ function processValues(elements, operator, args, parent, objectRegistry) {
                     if (arg === "null") return null;
                     if (arg === "undefined") return undefined;
 
-                    if ((arg.startsWith("'") && arg.endsWith("'")) || (arg.startsWith('"') && arg.endsWith('"'))) {
+                    if (isQuotedStringLiteral(arg)) {
                         let unquoted = arg.slice(1, -1);
                         if (unquoted.includes("__OBJ_")) {
                             return unquoted.replace(/__OBJ_\d+__/g, (match) => {
@@ -765,44 +716,53 @@ function resolveOperator(element, operator, args, parent, params, objectRegistry
     }
 
     let value = processValues(targetElements, operator, args, parent, objectRegistry);
-    if (value && typeof value === "string" && value.includes("$")) {
-        value = processOperators(element, value, [], parent, params, objectRegistry);
-    }
     return value;
 }
 
 export function processOperators(element, value, exclude = [], parent, params = [], objectRegistry = new Map()) {
-    if (typeof value !== "string" || (!value.includes("$") && !value.includes("ObjectId()"))) return value;
+    if (typeof value !== "string" || (!value.includes("$") && !value.includes("ObjectId()") && !value.includes("`"))) return value;
     let processedValue = value, hasPromise = false, unresolvedTokens = new Map();
 
-    while (processedValue.includes("$") || processedValue.includes("ObjectId()")) {
-        const paramMatch = processedValue.match(/^\$$PARAM_(\d+)\$\$/);
-        if (paramMatch && Array.isArray(params) && params.length > 0) {
-            const index = parseInt(paramMatch[1], 10);
-            if (index < params.length) {
-                processedValue = processedValue.replace(paramMatch[0], params[index]);
-                continue;
-            }
-        }
-
-        const { operator, args, rawContent, fullMatch } = findInnermostOperator(processedValue);
-        if (!operator || (operator === "$param" && !args)) break;
+    while (typeof processedValue === "string" && (processedValue.includes("$") || processedValue.includes("ObjectId()") || processedValue.includes("`"))) {
+        const { operator, args, rawContent, fullMatch, stringLiteral, layers, start } = findInnermostOperator(processedValue);
+        if ((!operator && !stringLiteral) || (operator === "$param" && !args)) break;
 
         const textToReplace = fullMatch || rawContent;
+        const replaceMatch = replacement =>
+            processedValue.slice(0, start) + replacement + processedValue.slice(start + textToReplace.length);
         if (exclude.includes(operator)) {
             const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
             unresolvedTokens.set(token, textToReplace);
-            processedValue = processedValue.replace(textToReplace, token);
+            processedValue = replaceMatch(token);
             continue;
         }
 
-        let resolvedValue = resolveOperator(element, operator, args, parent, params, objectRegistry);
+        let resolvedValue;
+        if (stringLiteral && layers > 1) {
+            const delimiter = "`".repeat(layers - 1);
+            resolvedValue = delimiter + args + delimiter;
+        } else if (stringLiteral) {
+            const result = astSyncRef
+                ? astSyncRef({
+                    executeAST: args,
+                    node: element,
+                    registry: objectRegistry,
+                    sandbox: Object.assign(
+                        Object.create(isBrowser ? browserGlobalsScope : sharedGlobalsScope),
+                        { element }
+                    )
+                })
+                : processOperators(element, args, exclude, null, params, objectRegistry);
+            resolvedValue = result instanceof Promise ? result.then(String) : String(result);
+        } else {
+            resolvedValue = resolveOperator(element, operator, args, parent, params, objectRegistry);
+        }
         if (resolvedValue === undefined) {
             if (operator === "$undefined" && processedValue.trim() === operator)
                 return undefined;
             const token = `__UNRESOLVED_${unresolvedTokens.size}__`;
             unresolvedTokens.set(token, textToReplace);
-            processedValue = processedValue.replace(textToReplace, token);
+            processedValue = replaceMatch(token);
             continue;
         }
         if (resolvedValue === null && operator === "$null" && processedValue.trim() === operator) {
@@ -811,7 +771,7 @@ export function processOperators(element, value, exclude = [], parent, params = 
         if (resolvedValue instanceof Promise) {
             const paramIndex = params.length;
             params.push(resolvedValue);
-            processedValue = processedValue.replace(textToReplace, `$$PARAM_${paramIndex}$$`);
+            processedValue = replaceMatch(`$$PARAM_${paramIndex}$$`);
             hasPromise = true;
             break;
         }
@@ -819,14 +779,14 @@ export function processOperators(element, value, exclude = [], parent, params = 
 
         let replacement = "";
         if (operator === "$param") params.push(resolvedValue);
-        else if (resolvedValue !== null && (typeof resolvedValue === "object" || typeof resolvedValue === "function")) {
+        else if (resolvedValue !== null && (typeof resolvedValue === "object" || typeof resolvedValue === "function" || typeof resolvedValue === "string")) {
             const token = `__OBJ_${objectRegistry.size}__`;
             objectRegistry.set(token, resolvedValue);
             replacement = token;
         } else replacement = resolvedValue ?? "";
 
         if (processedValue === textToReplace) { processedValue = replacement; break; }
-        processedValue = processedValue.replace(textToReplace, replacement);
+        processedValue = replaceMatch(replacement);
     }
 
     if (typeof processedValue === "string") {
@@ -834,7 +794,7 @@ export function processOperators(element, value, exclude = [], parent, params = 
         for (const token of keys) {
             processedValue = processedValue.replaceAll(token, unresolvedTokens.get(token));
         }
-        processedValue = unpackTokens(processedValue, objectRegistry);
+        if (!hasPromise && !parent) processedValue = unpackTokens(processedValue, objectRegistry);
     }
 
     if (hasPromise) return { value: processedValue, params, objectRegistry };
@@ -845,7 +805,13 @@ export async function processOperatorsAsync(element, value, exclude = [], parent
     let result = processOperators(element, value, exclude, parent, params, objectRegistry);
     while (result && typeof result === "object" && result.params) {
         const resolvedParams = await Promise.all(result.params);
-        result = processOperators(element, result.value, exclude, parent, resolvedParams, result.objectRegistry || objectRegistry);
+        objectRegistry = result.objectRegistry || objectRegistry;
+        const resumedValue = result.value.replace(/\$\$PARAM_(\d+)\$\$/g, (_, index) => {
+            const token = `__OBJ_${objectRegistry.size}__`;
+            objectRegistry.set(token, resolvedParams[Number(index)]);
+            return token;
+        });
+        result = processOperators(element, resumedValue, exclude, parent, [], objectRegistry);
     }
-    return result;
+    return parent ? result : unpackTokens(result, objectRegistry);
 }
