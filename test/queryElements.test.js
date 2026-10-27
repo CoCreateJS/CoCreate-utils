@@ -68,6 +68,30 @@ test('contentDocument enters the selected iframe document and continues querying
     assert.equal(frameDocument.queried, '.inside');
 });
 
+test('prefix lookup reads the prefixed query attribute from an iframe and returns its match', () => {
+    const iframe = new Element();
+    const inside = new Element();
+    const frameDocument = {
+        nodeType: 9,
+        querySelector(selector) {
+            this.queried = selector;
+            return inside;
+        }
+    };
+    iframe.contentDocument = frameDocument;
+    iframe.hasAttribute = (name) => name === 'position-query';
+    iframe.attributes = {
+        getNamedItem(name) {
+            return name === 'position-query'
+                ? { value: '$contentDocument .inside' }
+                : null;
+        }
+    };
+
+    assert.deepEqual(queryElements({ element: iframe, prefix: 'position' }), [inside]);
+    assert.equal(frameDocument.queried, '.inside');
+});
+
 test('$frame can be followed by contentDocument to query inside the containing frame', () => {
     const iframe = new Element();
     const inside = new Element();
