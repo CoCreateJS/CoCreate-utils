@@ -12,6 +12,14 @@ function concatValues(values) {
 		.join("");
 }
 
+function numericValue(value) {
+	if (value && typeof value === "object" && "value" in value) {
+		value = value.value;
+	}
+	const number = Number(value);
+	return Number.isFinite(number) ? number : 0;
+}
+
 const sharedGlobals = {
 	$Math: Math,
 	$Number: Number,
@@ -48,10 +56,14 @@ const sharedGlobals = {
 		if (isNaN(number)) return String(numCandidate ?? "");
 		return new Intl.NumberFormat(locale, options).format(number);
 	},
-	$add: (value) =>
-		Array.isArray(value)
-			? value.flat().reduce((sum, item) => Number(sum) + Number(item), 0)
-			: Number(value) || 0,
+	$add: (...values) =>
+		values.flat(Infinity).reduce((sum, item) => sum + numericValue(item), 0),
+	$multiply: (...values) =>
+		values.flat(Infinity).reduce((product, item) => product * numericValue(item), 1),
+	$round: (value, precision = 0) => {
+		const factor = 10 ** Number(precision);
+		return Math.round((numericValue(value) + Number.EPSILON) * factor) / factor;
+	},
 	$concat: (value) =>
 		Array.isArray(value)
 			? concatValues(value)

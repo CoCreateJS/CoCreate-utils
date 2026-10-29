@@ -35,7 +35,7 @@ export { createUpdate } from "./modules/createUpdate.js";
 export { parseTextToHtml } from "./modules/parseTextToHtml.js";
 export { escapeHtml } from "./modules/escapeHtml.js";
 export { cssPath } from "./modules/cssPath.js";
-export { queryElements, checkMediaQueries } from "./modules/queryElements.js";
+export { queryElements, queryElementsAll, checkMediaQueries } from "./modules/queryElements.js";
 export { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./modules/dataQuery.js";
 export { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
 export { astSync, astAsync } from "./modules/ast/index.js";
@@ -61,7 +61,7 @@ import { createUpdate } from "./modules/createUpdate.js";
 import { parseTextToHtml } from "./modules/parseTextToHtml.js";
 import { escapeHtml } from "./modules/escapeHtml.js";
 import { cssPath } from "./modules/cssPath.js";
-import { queryElements, checkMediaQueries } from "./modules/queryElements.js";
+import { queryElements, queryElementsAll, checkMediaQueries } from "./modules/queryElements.js";
 import { queryData, searchData, sortData, isEqualArray, isEqualObject } from "./modules/dataQuery.js";
 import { getAttributes, getAttributeNames, setAttributeNames } from "./modules/attributes.js";
 import { astSync, astAsync } from "./modules/ast/index.js";
@@ -92,6 +92,7 @@ const utils = {
     escapeHtml,
     cssPath,
     queryElements,
+    queryElementsAll,
     checkMediaQueries,
     queryData,
     searchData,

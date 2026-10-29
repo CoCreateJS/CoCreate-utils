@@ -110,7 +110,7 @@ a record satisfies the structured query.
 ```js
 const sorted = sortData(records, [
     { key: "status", direction: "asc" },
-    { key: "modified.on", direction: "desc" },
+    { key: "updated.on", direction: "desc" },
     { key: "_id", direction: "desc" }
 ]);
 ```
@@ -122,7 +122,7 @@ record.
 
 Sorting follows MongoDB conventions:
 
-- Keys support dot notation, including nested values such as `modified.on`.
+- Keys support dot notation, including nested values such as `updated.on`.
 - A missing field is treated as `null` for comparison.
 - Null and missing values sort before ordinary values in ascending order and
   after them in descending order.

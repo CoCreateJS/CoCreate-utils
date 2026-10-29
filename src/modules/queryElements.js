@@ -144,8 +144,10 @@ function splitSelector(selector, separator, firstOnly = false) {
 	return firstOnly ? [selector, ""] : [...parts, selector.slice(start).trim()];
 }
 
-export function queryElements({ element = document, prefix, selector }) {
+export function queryElements({ element, prefix, selector } = {}) {
 	try {
+		if (!element) return [];
+
 		let elements = new Set();
 
 		if (!selector && element.nodeType === 1) {
@@ -235,4 +237,23 @@ export function queryElements({ element = document, prefix, selector }) {
 		);
 		return [];
 	}
+}
+
+export function queryElementsAll({ element, prefix, selector } = {}) {
+	if (!element) return [];
+
+	if (!selector && element?.nodeType === 1) {
+		const queryName = prefix ? `${prefix}-query` : null;
+		if (!queryName || !element.hasAttribute(queryName)) return [];
+		selector = element.attributes.getNamedItem(queryName)?.value;
+	}
+
+	if (typeof selector !== "string" || !selector.trim()) return [];
+
+	const allSelectors = splitSelector(selector, /,/)
+		.map((item) => item.trim())
+		.map((item) => item && (item.endsWith("[]") ? item : `${item}[]`))
+		.join(", ");
+
+	return queryElements({ element, prefix, selector: allSelectors });
 }

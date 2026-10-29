@@ -1,4 +1,4 @@
-import { queryElements } from "../queryElements.js";
+import { queryElements, queryElementsAll } from "../queryElements.js";
 
 function getElement(context) {
     return context?.element || context?.$this || null;
@@ -72,11 +72,9 @@ const browserGlobals = {
         const element = getElement(this);
         if (typeof selector === "string") {
             selector = selector.trim().replace(/^['"]|['"]$/g, "");
-            if (selector.includes("$document")) return [];
         }
         try {
-            const results = queryElements({ element, selector });
-            return results ? Array.from(results) : [];
+            return queryElementsAll({ element, selector });
         } catch (error) {
             console.warn(`[Browser Globals] Invalid $queryAll selector => "${selector}"`, error);
             return [];
