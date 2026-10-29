@@ -1,5 +1,6 @@
 const queryTypes = [
 	"$closest",
+	"$matches",
 	"$parent",
 	"$next",
 	"$previous",
@@ -8,6 +9,7 @@ const queryTypes = [
 	"$contentDocument",
 	"$activeElement",
 	"$clickedElement",
+	"$hoveredElement",
 	"$top"
 ];
 
@@ -74,6 +76,14 @@ function queryType(element, type) {
 			const doc = element.nodeType === 9 ? element : element.document || element.ownerDocument;
 			return doc?.clickedElement;
 		}
+		case "$hoveredElement": {
+			if (element.tagName === "IFRAME") {
+				const doc = element.contentDocument;
+				return element.hoveredElement ?? doc?.hoveredElement;
+			}
+			const doc = element.nodeType === 9 ? element : element.document || element.ownerDocument;
+			return doc?.hoveredElement;
+		}
 		case "$document":
 			return element.nodeType === 9 ? element : element.document || element.ownerDocument;
 		case "$closest":
@@ -98,9 +108,11 @@ function querySelector(element, selector) {
 	if (!element) return null;
 	// Permit a Window context to query its document when supplied directly.
 	if (element.document) element = element.document;
-	return selector.endsWith("[]")
-		? element.querySelectorAll(selector.slice(0, -2))
-		: element.querySelector(selector);
+	const queryAll = selector.endsWith("[]");
+	const actualSelector = queryAll ? selector.slice(0, -2) : selector;
+	return queryAll
+		? element.querySelectorAll(actualSelector)
+		: element.querySelector(actualSelector);
 }
 
 // Split only outside CSS brackets, parentheses, strings, and escapes.
@@ -184,6 +196,12 @@ export function queryElements({ element = document, prefix, selector }) {
 				if (operator === "$closest") {
 					let [closest, remaining] = splitSelector(remainingSelector, /\s/, true);
 					queriedElement = queriedElement.closest(closest);
+					remainingSelector = remaining;
+				} else if (operator === "$matches") {
+					const [matchSelector, remaining] = splitSelector(remainingSelector, /\s/, true);
+					if (!matchSelector || !queriedElement.matches?.(matchSelector)) {
+						queriedElement = null;
+					}
 					remainingSelector = remaining;
 				} else {
 					queriedElement = queryType(queriedElement, operator);
