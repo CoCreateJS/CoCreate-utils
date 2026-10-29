@@ -45,7 +45,7 @@
       "default": "./src/browser.js"
     },
     "./selection": "./src/modules/selection.js",
-    "./iframe": "./src/iframe.js",
+    "./iframe": "./src/modules/iframe.js",
     "./browser": "./src/browser.js",
     "./server": "./src/server.js"
   },
