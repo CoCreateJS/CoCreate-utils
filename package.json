@@ -15,6 +15,139 @@
   "publishConfig": {
     "access": "public"
   },
+  "cocreate": {
+    "environment": [
+      "client",
+      "server"
+    ],
+    "interface": {
+      "schemaVersion": 1,
+      "summary": "A simple utils component in vanilla javascript. Easily configured using HTML5 attributes and/or JavaScript API.",
+      "client": {
+        "source": "src/browser.js",
+        "declarative": {
+          "selectors": [
+            "${selector}"
+          ],
+          "attributes": [
+            {
+              "name": "contenteditable"
+            },
+            {
+              "name": "eid"
+            }
+          ]
+        },
+        "api": {
+          "exports": [
+            "ObjectId",
+            "astAsync",
+            "astSync",
+            "caseHandler",
+            "checkMediaQueries",
+            "checkValue",
+            "cloudProviders",
+            "convertValue",
+            "createUpdate",
+            "cssPath",
+            "decodeValue",
+            "dotNotationToObject",
+            "encodeValue",
+            "escapeHtml",
+            "getAttributeNames",
+            "getAttributes",
+            "getClientInfo",
+            "getClockOffset",
+            "getRelativePath",
+            "getValueAttribute",
+            "getValueFromObject",
+            "hasSelection",
+            "isEqualArray",
+            "isEqualObject",
+            "isValidDate",
+            "objectToDotNotation",
+            "objectToSearchParams",
+            "parseJson",
+            "parseTextToHtml",
+            "processOperators",
+            "processOperatorsAsync",
+            "queryData",
+            "queryElements",
+            "queryElementsAll",
+            "regex",
+            "resolveProperty",
+            "searchData",
+            "searchParamsToObject",
+            "setAttributeNames",
+            "sortData",
+            "toArray",
+            "toBoolean",
+            "transformValue",
+            "ulid",
+            "ulidDecode",
+            "uuid",
+            "valueHandlers"
+          ]
+        }
+      },
+      "server": {
+        "source": "src/server.js",
+        "declarative": {
+          "selectors": [
+            "${selector}"
+          ]
+        },
+        "api": {
+          "exports": [
+            "HTMLScanner",
+            "ObjectId",
+            "astAsync",
+            "astSync",
+            "caseHandler",
+            "checkValue",
+            "cloudProviders",
+            "convertValue",
+            "createUpdate",
+            "decodeValue",
+            "dotNotationToObject",
+            "encodeValue",
+            "escapeHtml",
+            "getAttributeNames",
+            "getAttributes",
+            "getClientInfo",
+            "getClockOffset",
+            "getRelativePath",
+            "getValueAttribute",
+            "getValueFromObject",
+            "isEqualArray",
+            "isEqualObject",
+            "isValidDate",
+            "objectToDotNotation",
+            "objectToSearchParams",
+            "parseJson",
+            "parseTextToHtml",
+            "processOperators",
+            "processOperatorsAsync",
+            "queryData",
+            "regex",
+            "resolveProperty",
+            "searchData",
+            "searchParamsToObject",
+            "security",
+            "setAttributeNames",
+            "sortData",
+            "toArray",
+            "toBoolean",
+            "transformValue",
+            "ulid",
+            "ulidDecode",
+            "uuid",
+            "valueHandlers"
+          ]
+        }
+      }
+    }
+  },
   "scripts": {
     "start": "webpack --config webpack.config.js",
     "build": "webpack --mode=production --config webpack.config.js",
