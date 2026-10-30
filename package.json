@@ -110,7 +110,14 @@
             "ulidDecode",
             "uuid",
             "valueHandlers"
-          ]
+        ],
+        "methods": [
+          {
+            "name": "getData",
+            "signature": "getData({ form, prefix })",
+            "description": "Collects values from elements with key or {prefix}-key and converts dotted keys into nested objects."
+          }
+        ]
         }
       },
       "server": {
