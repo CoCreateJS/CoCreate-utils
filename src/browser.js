@@ -17,6 +17,8 @@
  ********************************************************************************/
 
 export { getClientInfo } from "./modules/getClientInfo.js";
+export { getData } from "./modules/getData.js";
+export { setData } from "./modules/setData.js";
 export { cloudProviders } from "./modules/cloudProviders.js";
 export { getRelativePath } from "./modules/getRelativePath.js";
 export { getClockOffset } from "./modules/getClockOffset.js";
@@ -43,6 +45,8 @@ export { processOperators, processOperatorsAsync } from "./modules/ast/operators
 export { hasSelection } from "./modules/selection.js";
 
 import { getClientInfo } from "./modules/getClientInfo.js";
+import { getData } from "./modules/getData.js";
+import { setData } from "./modules/setData.js";
 import { cloudProviders } from "./modules/cloudProviders.js";
 import { getRelativePath } from "./modules/getRelativePath.js";
 import { getClockOffset } from "./modules/getClockOffset.js";
@@ -73,6 +77,8 @@ import * as valueHandlers from "./modules/valueHandler.js";
 const utils = {
     ...valueHandlers,
     getClientInfo,
+    getData,
+    setData,
     cloudProviders,
     getRelativePath,
 	getClockOffset,

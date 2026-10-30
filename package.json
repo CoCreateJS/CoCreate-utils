@@ -35,6 +35,27 @@
             },
             {
               "name": "eid"
+            },
+            {
+              "name": "key | {prefix}-key",
+              "valueType": "string",
+              "role": "Names the property read or written by getData and setData."
+            },
+            {
+              "name": "get-data | {prefix}-get-data",
+              "valueType": "boolean-like string",
+              "acceptedValues": [
+                "false"
+              ],
+              "role": "When false, excludes the element from getData collection."
+            },
+            {
+              "name": "set-data | {prefix}-set-data",
+              "valueType": "boolean-like string",
+              "acceptedValues": [
+                "false"
+              ],
+              "role": "When false, excludes the element from setData mapping."
             }
           ]
         },
@@ -58,6 +79,7 @@
             "getAttributes",
             "getClientInfo",
             "getClockOffset",
+            "getData",
             "getRelativePath",
             "getValueAttribute",
             "getValueFromObject",
@@ -79,6 +101,7 @@
             "searchData",
             "searchParamsToObject",
             "setAttributeNames",
+            "setData",
             "sortData",
             "toArray",
             "toBoolean",
