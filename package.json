@@ -68,25 +68,33 @@
             "checkMediaQueries",
             "checkValue",
             "cloudProviders",
+            "contentTypes",
             "convertValue",
             "createUpdate",
             "cssPath",
+            "decodeContent",
             "decodeValue",
             "dotNotationToObject",
+            "encodeContent",
             "encodeValue",
             "escapeHtml",
             "getAttributeNames",
             "getAttributes",
             "getClientInfo",
             "getClockOffset",
+            "getContentType",
             "getData",
+            "getExtension",
+            "getExtensions",
             "getRelativePath",
             "getValueAttribute",
             "getValueFromObject",
             "hasSelection",
             "isEqualArray",
             "isEqualObject",
+            "isTextContentType",
             "isValidDate",
+            "mimeTypes",
             "objectToDotNotation",
             "objectToSearchParams",
             "parseJson",
@@ -110,14 +118,52 @@
             "ulidDecode",
             "uuid",
             "valueHandlers"
-        ],
-        "methods": [
-          {
-            "name": "getData",
-            "signature": "getData({ form, prefix })",
-            "description": "Collects values from elements with key or {prefix}-key and converts dotted keys into nested objects."
-          }
-        ]
+          ],
+          "methods": [
+            {
+              "name": "getData",
+              "signature": "getData({ form, prefix })",
+              "description": "Collects values from elements with key or {prefix}-key and converts dotted keys into nested objects."
+            },
+            {
+              "name": "encodeContent",
+              "signature": "encodeContent({ value, contentType?, pathname?, encoding?, format?, charset?, fatal? })",
+              "description": "Prepares UTF-8 text or encoded binary for JSON transport and storage; Blob/File inputs return a Promise."
+            },
+            {
+              "name": "decodeContent",
+              "signature": "decodeContent({ value, contentType?, pathname?, encoding?, format?, charset?, fatal? })",
+              "description": "Restores text, Uint8Array bytes, or an ArrayBuffer for HTTP responses, file writes, and binary storage; Blob/File inputs return a Promise."
+            },
+            {
+              "name": "getContentType",
+              "signature": "getContentType({ contentType?, value?, extension?, pathname?, fallback? })",
+              "description": "Resolves a MIME type from explicit metadata, a data URL, a Blob/File, an extension, or a pathname."
+            },
+            {
+              "name": "getExtension",
+              "signature": "getExtension({ contentType, fallback? })",
+              "description": "Returns the preferred filename extension for a MIME type, or a configurable fallback."
+            },
+            {
+              "name": "getExtensions",
+              "signature": "getExtensions({ contentType })",
+              "description": "Returns all known extensions for a MIME type, preferred first; unknown types return an empty array."
+            },
+            {
+              "name": "isTextContentType",
+              "signature": "isTextContentType(contentType)",
+              "description": "Classifies a MIME type using registry flags and textual MIME families."
+            }
+          ],
+          "astOperators": [
+            "$encodeContent",
+            "$decodeContent",
+            "$getContentType",
+            "$getExtension",
+            "$getExtensions",
+            "$isTextContentType"
+          ]
         }
       },
       "server": {
@@ -136,22 +182,30 @@
             "caseHandler",
             "checkValue",
             "cloudProviders",
+            "contentTypes",
             "convertValue",
             "createUpdate",
+            "decodeContent",
             "decodeValue",
             "dotNotationToObject",
+            "encodeContent",
             "encodeValue",
             "escapeHtml",
             "getAttributeNames",
             "getAttributes",
             "getClientInfo",
             "getClockOffset",
+            "getContentType",
+            "getExtension",
+            "getExtensions",
             "getRelativePath",
             "getValueAttribute",
             "getValueFromObject",
             "isEqualArray",
             "isEqualObject",
+            "isTextContentType",
             "isValidDate",
+            "mimeTypes",
             "objectToDotNotation",
             "objectToSearchParams",
             "parseJson",
@@ -173,6 +227,46 @@
             "ulidDecode",
             "uuid",
             "valueHandlers"
+          ],
+          "methods": [
+            {
+              "name": "encodeContent",
+              "signature": "encodeContent({ value, contentType?, pathname?, encoding?, format?, charset?, fatal? })",
+              "description": "Prepares UTF-8 text or encoded binary for JSON transport and storage; Blob/File inputs return a Promise."
+            },
+            {
+              "name": "decodeContent",
+              "signature": "decodeContent({ value, contentType?, pathname?, encoding?, format?, charset?, fatal? })",
+              "description": "Restores text, Uint8Array bytes, or an ArrayBuffer for HTTP responses, file writes, and binary storage; Blob/File inputs return a Promise."
+            },
+            {
+              "name": "getContentType",
+              "signature": "getContentType({ contentType?, value?, extension?, pathname?, fallback? })",
+              "description": "Resolves a MIME type from explicit metadata, a data URL, a Blob/File, an extension, or a pathname."
+            },
+            {
+              "name": "getExtension",
+              "signature": "getExtension({ contentType, fallback? })",
+              "description": "Returns the preferred filename extension for a MIME type, or a configurable fallback."
+            },
+            {
+              "name": "getExtensions",
+              "signature": "getExtensions({ contentType })",
+              "description": "Returns all known extensions for a MIME type, preferred first; unknown types return an empty array."
+            },
+            {
+              "name": "isTextContentType",
+              "signature": "isTextContentType(contentType)",
+              "description": "Classifies a MIME type using registry flags and textual MIME families."
+            }
+          ],
+          "astOperators": [
+            "$encodeContent",
+            "$decodeContent",
+            "$getContentType",
+            "$getExtension",
+            "$getExtensions",
+            "$isTextContentType"
           ]
         }
       }
@@ -210,7 +304,8 @@
     "./selection": "./src/modules/selection.js",
     "./iframe": "./src/modules/iframe.js",
     "./browser": "./src/browser.js",
-    "./server": "./src/server.js"
+    "./server": "./src/server.js",
+    "./file": "./src/modules/file/index.js"
   },
   "sideEffects": false,
   "devDependencies": {

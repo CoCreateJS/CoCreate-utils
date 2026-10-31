@@ -16,6 +16,7 @@
  *
  ********************************************************************************/
 
+export * from "./modules/file/index.js";
 export { cloudProviders } from "./modules/cloudProviders.js";
 export { getClientInfo } from "./modules/getClientInfo.js";
 export { getRelativePath } from "./modules/getRelativePath.js";
@@ -67,10 +68,12 @@ import { getAttributes, getAttributeNames, setAttributeNames } from "./modules/a
 import security from './modules/security.js';
 
 
+import * as fileUtils from "./modules/file/index.js";
 import * as valueHandlers from "./modules/valueHandler.js";
 
 const utils = {
     ...valueHandlers,
+    ...fileUtils,
     cloudProviders,
     getClientInfo,
     getRelativePath,
