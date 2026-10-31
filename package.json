@@ -302,6 +302,7 @@
       "default": "./src/browser.js"
     },
     "./selection": "./src/modules/selection.js",
+    "./queryElements": "./src/modules/queryElements.js",
     "./iframe": "./src/modules/iframe.js",
     "./browser": "./src/browser.js",
     "./server": "./src/server.js",
